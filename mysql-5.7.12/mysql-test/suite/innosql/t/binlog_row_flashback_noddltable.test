@@ -1,0 +1,101 @@
+--source include/have_log_bin.inc
+--source include/have_innodb.inc
+
+set binlog_format=ROW;
+flush logs;
+
+use test;
+--echo
+--echo ******* no-ddl test
+--echo
+--echo xxx 1.test flashback insert sql
+create table t1 (a int);
+create table t2 (b int);
+--echo before:
+select * from t1;
+
+let $binlog_pos_start=query_get_value(SHOW MASTER STATUS, Position, 1);
+
+insert into t1 value (1);
+insert into t2 value (1);
+--echo after insert:
+select * from t1;
+select * from t2;
+
+let $MYSQLD_DATADIR= `select @@datadir`;
+let $binlog_file=query_get_value(SHOW MASTER STATUS, File, 1);
+let $binlog_pos_stop=query_get_value(SHOW MASTER STATUS, Position, 1);
+
+flush logs;
+
+--exec $MYSQL_BINLOG -v -B -d test -T t1 --start-position=$binlog_pos_start --stop-position=$binlog_pos_stop  $MYSQLD_DATADIR/$binlog_file | $MYSQL
+--echo after flashback:
+select * from t1;
+select * from t2;
+drop table t1;
+drop table t2;
+--echo xxx
+--echo
+--echo xxx 2.test flashback delete sql
+create table t1 (a int);
+create table t2 (b int);
+insert into t1 value (1);
+insert into t2 value (1);
+--echo before:
+select * from t1;
+select * from t2;
+
+let $binlog_pos_start=query_get_value(SHOW MASTER STATUS, Position, 1);
+
+delete from t1 where a=1;
+delete from t2 where b=1;
+--echo after delete:
+select * from t1;
+select * from t2;
+
+let $MYSQLD_DATADIR= `select @@datadir`;
+let $binlog_file=query_get_value(SHOW MASTER STATUS, File, 1);
+let $binlog_pos_stop=query_get_value(SHOW MASTER STATUS, Position, 1);
+
+flush logs;
+
+--exec $MYSQL_BINLOG -v -B -d test -T t1  --start-position=$binlog_pos_start --stop-position=$binlog_pos_stop  $MYSQLD_DATADIR/$binlog_file | $MYSQL
+--echo after flashback:
+select * from t1;
+select * from t2;
+drop table t1;
+drop table t2;
+--echo xxx
+--echo
+
+--echo xxx3.test flashback update sql
+create table t1 (a int);
+create table t2 (b int);
+insert into t1 value (1);
+insert into t2 value (2);
+--echo before:
+select * from t1;
+select * from t2;
+
+let $binlog_pos_start=query_get_value(SHOW MASTER STATUS, Position, 1);
+
+update t1 set a=2;
+update t2 set b=2;
+--echo after update:
+select * from t1;
+select * from t2;
+let $MYSQLD_DATADIR= `select @@datadir`;
+let $binlog_file=query_get_value(SHOW MASTER STATUS, File, 1);
+let $binlog_pos_stop=query_get_value(SHOW MASTER STATUS, Position, 1);
+
+flush logs;
+
+--exec $MYSQL_BINLOG -v -B -d test -T t1  --start-position=$binlog_pos_start --stop-position=$binlog_pos_stop  $MYSQLD_DATADIR/$binlog_file | $MYSQL
+--echo after flashback:
+select * from t1;
+select * from t2;
+drop table t1;
+drop table t2;
+--echo xxx
+--echo
+

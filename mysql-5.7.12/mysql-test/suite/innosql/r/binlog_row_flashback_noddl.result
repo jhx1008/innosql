@@ -1,0 +1,62 @@
+set binlog_format=ROW;
+flush logs;
+use test;
+
+******* no-ddl test
+
+xxx 1.test flashback insert sql
+create table t1 (a int);
+before:
+select * from t1;
+a
+insert into t1 value (1);
+after insert:
+select * from t1;
+a
+1
+flush logs;
+after flashback:
+select * from t1;
+a
+drop table t1;
+xxx
+
+xxx 2.test flashback delete sql
+create table t1 (a int);
+insert into t1 value (1);
+before:
+select * from t1;
+a
+1
+delete from t1 where a=1;
+after delete:
+select * from t1;
+a
+flush logs;
+after flashback:
+select * from t1;
+a
+1
+drop table t1;
+xxx
+
+xxx3.test flashback update sql
+create table t1 (a int);
+insert into t1 value (1);
+before:
+select * from t1;
+a
+1
+update t1 set a=2;
+after update:
+select * from t1;
+a
+2
+flush logs;
+after flashback:
+select * from t1;
+a
+1
+drop table t1;
+xxx
+
