@@ -42,7 +42,7 @@
 #include "sql_prepare.h"              // select_like_stmt_cmd_test
 #include "probes_mysql.h"             // MYSQL_UPDATE_START
 #include "sql_parse.h"                // all_tables_not_ok
-
+#include "sql_statistics.h"
 /**
    True if the table's input and output record buffers are comparable using
    compare_records(TABLE*).
@@ -595,6 +595,7 @@ bool mysql_update(THD *thd,
       goto exit_without_my_ok;
     }
 
+    statistics_save_index(thd, table, &plan);
     if (used_key_is_modified || order)
     {
       /*

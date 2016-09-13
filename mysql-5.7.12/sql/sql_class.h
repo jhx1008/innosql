@@ -59,7 +59,7 @@ typedef struct st_log_info LOG_INFO;
 typedef struct st_columndef MI_COLUMNDEF;
 typedef struct st_mysql_lex_string LEX_STRING;
 typedef struct user_conn USER_CONN;
-
+class SQLInfo;
 /**
   The meat of thd_proc_info(THD*, char*), a macro that packs the last
   three calling-info parameters.
@@ -547,6 +547,8 @@ typedef struct system_variables
   char *track_sysvars_ptr;
   my_bool session_track_schema;
   my_bool session_track_state_change;
+  uint  threadpool_high_prio_tickets;
+  ulong threadpool_high_prio_mode;
   ulong   session_track_transaction_info;
   /**
     Compatibility option to mark the pre MySQL-5.6.4 temporals columns using
@@ -1415,6 +1417,7 @@ private:
   { DBUG_ASSERT(0); return Query_arena::is_conventional(); }
 
 public:
+  ulonglong rpl_wait_begin_usec;
   MDL_context mdl_context;
 
   /*
@@ -1554,6 +1557,8 @@ public:
   Query_cache_tls query_cache_tls;
   /** Aditional network instrumentation for the server only. */
   NET_SERVER m_net_server_extension;
+  /** Thread scheduler callbacks for this connection */
+  THD_event_functions *scheduler;
   /**
     Hash for user variables.
     User variables are per session,
@@ -1699,7 +1704,7 @@ public:
     allocated) strings, which memory won't go away over time.
   */
   const char *proc_info;
-
+	NET	  net;												// client connection descriptor
   Protocol_text   protocol_text;    // Normal protocol
   Protocol_binary protocol_binary;  // Binary protocol
 
@@ -1885,6 +1890,7 @@ public:
   ulonglong  thr_create_utime;
   ulonglong  start_utime, utime_after_lock;
 
+  SQLInfo *m_sql_info;
   /**
     Type of lock to be used for all DML statements, except INSERT, in cases
     when lock is not specified explicitly.  Set to TL_WRITE or
@@ -1901,6 +1907,9 @@ public:
 
   /* <> 0 if we are inside of trigger or stored function. */
   uint in_sub_stmt;
+
+  /* Do not set socket timeouts for wait_timeout (used with threadpool) */
+  bool skip_wait_timeout;
 
   /** 
     Used by fill_status() to avoid acquiring LOCK_status mutex twice
@@ -2091,7 +2100,6 @@ private:
   /**@}*/
   // NOTE: Ideally those two should be in Protocol,
   // but currently its design doesn't allow that.
-  NET     net;                          // client connection descriptor
   String  packet;                       // dynamic buffer for network I/O
 public:
   void issue_unsafe_warnings();
@@ -2494,6 +2502,8 @@ private:
     filesort() before reading it for e.g. update.
   */
   ha_rows m_examined_row_count;
+  ha_rows m_logical_reads;
+  ha_rows m_physical_reads;
 
 private:
   USER_CONN *m_user_connect;
@@ -2515,6 +2525,12 @@ public:
   void time_out_user_resource_limits();
 
 public:
+  ha_rows get_logical_reads() const
+  {return m_logical_reads; }
+
+  ha_rows get_physical_reads() const
+  {return m_physical_reads; }
+
   ha_rows get_sent_row_count() const
   { return m_sent_row_count; }
 
@@ -2524,6 +2540,8 @@ public:
   void set_sent_row_count(ha_rows count);
   void set_examined_row_count(ha_rows count);
 
+  void set_logical_reads(ha_rows reads);
+  void set_physical_reads(ha_rows reads);
   void inc_sent_row_count(ha_rows count);
   void inc_examined_row_count(ha_rows count);
 
@@ -3164,7 +3182,8 @@ public:
   void update_server_status()
   {
     ulonglong end_utime_of_query= current_utime();
-    if (end_utime_of_query > utime_after_lock + variables.long_query_time)
+    if ((end_utime_of_query > utime_after_lock + variables.long_query_time) ||
+		m_logical_reads > long_query_io_ulong)
       server_status|= SERVER_QUERY_WAS_SLOW;
   }
   inline ulonglong found_rows(void)
@@ -4061,7 +4080,7 @@ public:
     *p_db_length= m_db.length;
     return false;
   }
-  thd_scheduler scheduler;
+  thd_scheduler event_scheduler;
 
 public:
   /**

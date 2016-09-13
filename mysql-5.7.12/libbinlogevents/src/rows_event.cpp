@@ -168,7 +168,7 @@ Rows_event::Rows_event(const char *buf, unsigned int event_len,
   : Binary_log_event(&buf, description_event->binlog_version,
                      description_event->server_version),
     m_table_id(0), m_width(0), m_extra_row_data(0),
-    columns_before_image(0), columns_after_image(0), row(0)
+    columns_before_image(0), columns_after_image(0), row(0), data_size(0)
 {
   //buf is advanced in Binary_log_event constructor to point to
   //beginning of post-header
@@ -282,9 +282,7 @@ Rows_event::Rows_event(const char *buf, unsigned int event_len,
 
   const unsigned char* ptr_rows_data= (unsigned char*) ptr_after_width;
 
-  size_t const data_size= event_len -
-                          (ptr_rows_data + common_header_len -
-                          (const unsigned char *) buf);
+  data_size= event_len - (ptr_rows_data + common_header_len - (const unsigned char *) buf);
 
   row.reserve(data_size + 1);
   for (unsigned long i= 0; i < data_size + 1; i++)

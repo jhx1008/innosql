@@ -1,5 +1,5 @@
 show profiles;
-Query_ID	Duration	Query
+Query_ID	Duration	Logical_reads	Physical_reads	Query
 show profile all;
 Status	Duration	CPU_user	CPU_system	Context_voluntary	Context_involuntary	Block_ops_in	Block_ops_out	Messages_sent	Messages_received	Page_faults_major	Page_faults_minor	Swaps	Source_function	Source_file	Source_line
 show session variables like 'profil%';
@@ -71,34 +71,34 @@ select '012345678900123456789001234567890012345678900123456789001234567890012345
 big_string
 012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890
 show profiles;
-Query_ID	Duration	Query
-1	#	set session profiling_history_size=30
-2	#	show session variables like 'profil%'
-3	#	select @@profiling
-4	#	create table t1 (
+Query_ID	Duration	Logical_reads	Physical_reads	Query
+1	#	0	0	set session profiling_history_size=30
+2	#	0	0	show session variables like 'profil%'
+3	#	0	0	select @@profiling
+4	#	0	0	create table t1 (
 a int,
 b int
 )
-5	#	insert into t1 values (1,1), (2,null), (3, 4)
-6	#	insert into t1 values (5,1), (6,null), (7, 4)
-7	#	insert into t1 values (1,1), (2,null), (3, 4)
-8	#	insert into t1 values (5,1), (6,null), (7, 4)
-9	#	select max(x) from (select sum(a) as x from t1 group by b) as teeone
-10	#	insert into t1 select * from t1
-11	#	select count(*) from t1
-12	#	insert into t1 select * from t1
-13	#	insert into t1 select * from t1
-14	#	insert into t1 select * from t1
-15	#	select count(*) from t1
-16	#	insert into t1 select * from t1
-17	#	insert into t1 select * from t1
-18	#	insert into t1 select * from t1
-19	#	select count(*) from t1
-20	#	select sum(a) from t1
-21	#	select sum(a) from t1 group by b
-22	#	select sum(a) + sum(b) from t1 group by b
-23	#	select max(x) from (select sum(a) as x from t1 group by b) as teeone
-24	#	select '0123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345
+5	#	0	0	insert into t1 values (1,1), (2,null), (3, 4)
+6	#	0	0	insert into t1 values (5,1), (6,null), (7, 4)
+7	#	0	0	insert into t1 values (1,1), (2,null), (3, 4)
+8	#	0	0	insert into t1 values (5,1), (6,null), (7, 4)
+9	#	0	0	select max(x) from (select sum(a) as x from t1 group by b) as teeone
+10	#	0	0	insert into t1 select * from t1
+11	#	0	0	select count(*) from t1
+12	#	0	0	insert into t1 select * from t1
+13	#	0	0	insert into t1 select * from t1
+14	#	0	0	insert into t1 select * from t1
+15	#	0	0	select count(*) from t1
+16	#	0	0	insert into t1 select * from t1
+17	#	0	0	insert into t1 select * from t1
+18	#	0	0	insert into t1 select * from t1
+19	#	0	0	select count(*) from t1
+20	#	0	0	select sum(a) from t1
+21	#	0	0	select sum(a) from t1 group by b
+22	#	0	0	select sum(a) + sum(b) from t1 group by b
+23	#	0	0	select max(x) from (select sum(a) as x from t1 group by b) as teeone
+24	#	0	0	select '0123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345
 show profile for query 15;
 show profile cpu for query 15;
 show profile cpu, block io for query 15;
@@ -132,74 +132,74 @@ insert into t1 values (1), (2), (3);
 insert into t2 values (1), (2), (3);
 insert into t3 values (1), (2), (3);
 show profiles;
-Query_ID	Duration	Query
-10	#	insert into t1 select * from t1
-11	#	select count(*) from t1
-12	#	insert into t1 select * from t1
-13	#	insert into t1 select * from t1
-14	#	insert into t1 select * from t1
-15	#	select count(*) from t1
-16	#	insert into t1 select * from t1
-17	#	insert into t1 select * from t1
-18	#	insert into t1 select * from t1
-19	#	select count(*) from t1
-20	#	select sum(a) from t1
-21	#	select sum(a) from t1 group by b
-22	#	select sum(a) + sum(b) from t1 group by b
-23	#	select max(x) from (select sum(a) as x from t1 group by b) as teeone
-24	#	select '0123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345
-25	#	select * from information_schema.profiling
-26	#	select query_id, state, duration from information_schema.profiling
-27	#	select query_id, sum(duration) from information_schema.profiling group by query_id
-28	#	select query_id, count(*) from information_schema.profiling group by query_id
-29	#	select sum(duration) from information_schema.profiling
-30	#	select query_id, count(*), sum(duration) from information_schema.profiling group by query_id
-31	#	select CPU_user, CPU_system, Context_voluntary, Context_involuntary, Block_ops_in, Block_ops_out, Messages_sent, Messages_received, Page_faults_major, Page_faults_minor, Swaps, Source_function, Source_file, Source_line from information_schema.profiling
-32	#	drop table if exists t1, t2, t3
-33	#	SHOW WARNINGS
-34	#	create table t1 (id int )
-35	#	create table t2 (id int not null)
-36	#	create table t3 (id int not null primary key)
-37	#	insert into t1 values (1), (2), (3)
-38	#	insert into t2 values (1), (2), (3)
-39	#	insert into t3 values (1), (2), (3)
+Query_ID	Duration	Logical_reads	Physical_reads	Query
+10	#	0	0	insert into t1 select * from t1
+11	#	0	0	select count(*) from t1
+12	#	0	0	insert into t1 select * from t1
+13	#	0	0	insert into t1 select * from t1
+14	#	0	0	insert into t1 select * from t1
+15	#	0	0	select count(*) from t1
+16	#	0	0	insert into t1 select * from t1
+17	#	0	0	insert into t1 select * from t1
+18	#	0	0	insert into t1 select * from t1
+19	#	0	0	select count(*) from t1
+20	#	0	0	select sum(a) from t1
+21	#	0	0	select sum(a) from t1 group by b
+22	#	0	0	select sum(a) + sum(b) from t1 group by b
+23	#	0	0	select max(x) from (select sum(a) as x from t1 group by b) as teeone
+24	#	0	0	select '0123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345
+25	#	0	0	select * from information_schema.profiling
+26	#	0	0	select query_id, state, duration from information_schema.profiling
+27	#	0	0	select query_id, sum(duration) from information_schema.profiling group by query_id
+28	#	0	0	select query_id, count(*) from information_schema.profiling group by query_id
+29	#	0	0	select sum(duration) from information_schema.profiling
+30	#	0	0	select query_id, count(*), sum(duration) from information_schema.profiling group by query_id
+31	#	0	0	select CPU_user, CPU_system, Context_voluntary, Context_involuntary, Block_ops_in, Block_ops_out, Messages_sent, Messages_received, Page_faults_major, Page_faults_minor, Swaps, Source_function, Source_file, Source_line from information_schema.profiling
+32	#	0	0	drop table if exists t1, t2, t3
+33	#	0	0	SHOW WARNINGS
+34	#	0	0	create table t1 (id int )
+35	#	0	0	create table t2 (id int not null)
+36	#	0	0	create table t3 (id int not null primary key)
+37	#	0	0	insert into t1 values (1), (2), (3)
+38	#	0	0	insert into t2 values (1), (2), (3)
+39	#	0	0	insert into t3 values (1), (2), (3)
 select * from t1;
 id
 1
 2
 3
 show profiles;
-Query_ID	Duration	Query
-11	#	select count(*) from t1
-12	#	insert into t1 select * from t1
-13	#	insert into t1 select * from t1
-14	#	insert into t1 select * from t1
-15	#	select count(*) from t1
-16	#	insert into t1 select * from t1
-17	#	insert into t1 select * from t1
-18	#	insert into t1 select * from t1
-19	#	select count(*) from t1
-20	#	select sum(a) from t1
-21	#	select sum(a) from t1 group by b
-22	#	select sum(a) + sum(b) from t1 group by b
-23	#	select max(x) from (select sum(a) as x from t1 group by b) as teeone
-24	#	select '0123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345
-25	#	select * from information_schema.profiling
-26	#	select query_id, state, duration from information_schema.profiling
-27	#	select query_id, sum(duration) from information_schema.profiling group by query_id
-28	#	select query_id, count(*) from information_schema.profiling group by query_id
-29	#	select sum(duration) from information_schema.profiling
-30	#	select query_id, count(*), sum(duration) from information_schema.profiling group by query_id
-31	#	select CPU_user, CPU_system, Context_voluntary, Context_involuntary, Block_ops_in, Block_ops_out, Messages_sent, Messages_received, Page_faults_major, Page_faults_minor, Swaps, Source_function, Source_file, Source_line from information_schema.profiling
-32	#	drop table if exists t1, t2, t3
-33	#	SHOW WARNINGS
-34	#	create table t1 (id int )
-35	#	create table t2 (id int not null)
-36	#	create table t3 (id int not null primary key)
-37	#	insert into t1 values (1), (2), (3)
-38	#	insert into t2 values (1), (2), (3)
-39	#	insert into t3 values (1), (2), (3)
-40	#	select * from t1
+Query_ID	Duration	Logical_reads	Physical_reads	Query
+11	#	0	0	select count(*) from t1
+12	#	0	0	insert into t1 select * from t1
+13	#	0	0	insert into t1 select * from t1
+14	#	0	0	insert into t1 select * from t1
+15	#	0	0	select count(*) from t1
+16	#	0	0	insert into t1 select * from t1
+17	#	0	0	insert into t1 select * from t1
+18	#	0	0	insert into t1 select * from t1
+19	#	0	0	select count(*) from t1
+20	#	0	0	select sum(a) from t1
+21	#	0	0	select sum(a) from t1 group by b
+22	#	0	0	select sum(a) + sum(b) from t1 group by b
+23	#	0	0	select max(x) from (select sum(a) as x from t1 group by b) as teeone
+24	#	0	0	select '0123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345
+25	#	0	0	select * from information_schema.profiling
+26	#	0	0	select query_id, state, duration from information_schema.profiling
+27	#	0	0	select query_id, sum(duration) from information_schema.profiling group by query_id
+28	#	0	0	select query_id, count(*) from information_schema.profiling group by query_id
+29	#	0	0	select sum(duration) from information_schema.profiling
+30	#	0	0	select query_id, count(*), sum(duration) from information_schema.profiling group by query_id
+31	#	0	0	select CPU_user, CPU_system, Context_voluntary, Context_involuntary, Block_ops_in, Block_ops_out, Messages_sent, Messages_received, Page_faults_major, Page_faults_minor, Swaps, Source_function, Source_file, Source_line from information_schema.profiling
+32	#	0	0	drop table if exists t1, t2, t3
+33	#	0	0	SHOW WARNINGS
+34	#	0	0	create table t1 (id int )
+35	#	0	0	create table t2 (id int not null)
+36	#	0	0	create table t3 (id int not null primary key)
+37	#	0	0	insert into t1 values (1), (2), (3)
+38	#	0	0	insert into t2 values (1), (2), (3)
+39	#	0	0	insert into t3 values (1), (2), (3)
+40	#	0	0	select * from t1
 This ^^ should end in "select * from t1;"
 delete from t1;
 insert into t1 values (1), (2), (3);
@@ -213,73 +213,73 @@ id
 2
 3
 show profiles;
-Query_ID	Duration	Query
-15	#	select count(*) from t1
-16	#	insert into t1 select * from t1
-17	#	insert into t1 select * from t1
-18	#	insert into t1 select * from t1
-19	#	select count(*) from t1
-20	#	select sum(a) from t1
-21	#	select sum(a) from t1 group by b
-22	#	select sum(a) + sum(b) from t1 group by b
-23	#	select max(x) from (select sum(a) as x from t1 group by b) as teeone
-24	#	select '0123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345
-25	#	select * from information_schema.profiling
-26	#	select query_id, state, duration from information_schema.profiling
-27	#	select query_id, sum(duration) from information_schema.profiling group by query_id
-28	#	select query_id, count(*) from information_schema.profiling group by query_id
-29	#	select sum(duration) from information_schema.profiling
-30	#	select query_id, count(*), sum(duration) from information_schema.profiling group by query_id
-31	#	select CPU_user, CPU_system, Context_voluntary, Context_involuntary, Block_ops_in, Block_ops_out, Messages_sent, Messages_received, Page_faults_major, Page_faults_minor, Swaps, Source_function, Source_file, Source_line from information_schema.profiling
-32	#	drop table if exists t1, t2, t3
-33	#	SHOW WARNINGS
-34	#	create table t1 (id int )
-35	#	create table t2 (id int not null)
-36	#	create table t3 (id int not null primary key)
-37	#	insert into t1 values (1), (2), (3)
-38	#	insert into t2 values (1), (2), (3)
-39	#	insert into t3 values (1), (2), (3)
-40	#	select * from t1
-41	#	delete from t1
-42	#	insert into t1 values (1), (2), (3)
-43	#	insert into t1 values (1), (2), (3)
-44	#	select * from t1
+Query_ID	Duration	Logical_reads	Physical_reads	Query
+15	#	0	0	select count(*) from t1
+16	#	0	0	insert into t1 select * from t1
+17	#	0	0	insert into t1 select * from t1
+18	#	0	0	insert into t1 select * from t1
+19	#	0	0	select count(*) from t1
+20	#	0	0	select sum(a) from t1
+21	#	0	0	select sum(a) from t1 group by b
+22	#	0	0	select sum(a) + sum(b) from t1 group by b
+23	#	0	0	select max(x) from (select sum(a) as x from t1 group by b) as teeone
+24	#	0	0	select '0123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345
+25	#	0	0	select * from information_schema.profiling
+26	#	0	0	select query_id, state, duration from information_schema.profiling
+27	#	0	0	select query_id, sum(duration) from information_schema.profiling group by query_id
+28	#	0	0	select query_id, count(*) from information_schema.profiling group by query_id
+29	#	0	0	select sum(duration) from information_schema.profiling
+30	#	0	0	select query_id, count(*), sum(duration) from information_schema.profiling group by query_id
+31	#	0	0	select CPU_user, CPU_system, Context_voluntary, Context_involuntary, Block_ops_in, Block_ops_out, Messages_sent, Messages_received, Page_faults_major, Page_faults_minor, Swaps, Source_function, Source_file, Source_line from information_schema.profiling
+32	#	0	0	drop table if exists t1, t2, t3
+33	#	0	0	SHOW WARNINGS
+34	#	0	0	create table t1 (id int )
+35	#	0	0	create table t2 (id int not null)
+36	#	0	0	create table t3 (id int not null primary key)
+37	#	0	0	insert into t1 values (1), (2), (3)
+38	#	0	0	insert into t2 values (1), (2), (3)
+39	#	0	0	insert into t3 values (1), (2), (3)
+40	#	0	0	select * from t1
+41	#	0	0	delete from t1
+42	#	0	0	insert into t1 values (1), (2), (3)
+43	#	0	0	insert into t1 values (1), (2), (3)
+44	#	0	0	select * from t1
 set session profiling = OFF;
 select sum(id) from t1;
 sum(id)
 12
 show profiles;
-Query_ID	Duration	Query
-15	#	select count(*) from t1
-16	#	insert into t1 select * from t1
-17	#	insert into t1 select * from t1
-18	#	insert into t1 select * from t1
-19	#	select count(*) from t1
-20	#	select sum(a) from t1
-21	#	select sum(a) from t1 group by b
-22	#	select sum(a) + sum(b) from t1 group by b
-23	#	select max(x) from (select sum(a) as x from t1 group by b) as teeone
-24	#	select '0123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345
-25	#	select * from information_schema.profiling
-26	#	select query_id, state, duration from information_schema.profiling
-27	#	select query_id, sum(duration) from information_schema.profiling group by query_id
-28	#	select query_id, count(*) from information_schema.profiling group by query_id
-29	#	select sum(duration) from information_schema.profiling
-30	#	select query_id, count(*), sum(duration) from information_schema.profiling group by query_id
-31	#	select CPU_user, CPU_system, Context_voluntary, Context_involuntary, Block_ops_in, Block_ops_out, Messages_sent, Messages_received, Page_faults_major, Page_faults_minor, Swaps, Source_function, Source_file, Source_line from information_schema.profiling
-32	#	drop table if exists t1, t2, t3
-33	#	SHOW WARNINGS
-34	#	create table t1 (id int )
-35	#	create table t2 (id int not null)
-36	#	create table t3 (id int not null primary key)
-37	#	insert into t1 values (1), (2), (3)
-38	#	insert into t2 values (1), (2), (3)
-39	#	insert into t3 values (1), (2), (3)
-40	#	select * from t1
-41	#	delete from t1
-42	#	insert into t1 values (1), (2), (3)
-43	#	insert into t1 values (1), (2), (3)
-44	#	select * from t1
+Query_ID	Duration	Logical_reads	Physical_reads	Query
+15	#	0	0	select count(*) from t1
+16	#	0	0	insert into t1 select * from t1
+17	#	0	0	insert into t1 select * from t1
+18	#	0	0	insert into t1 select * from t1
+19	#	0	0	select count(*) from t1
+20	#	0	0	select sum(a) from t1
+21	#	0	0	select sum(a) from t1 group by b
+22	#	0	0	select sum(a) + sum(b) from t1 group by b
+23	#	0	0	select max(x) from (select sum(a) as x from t1 group by b) as teeone
+24	#	0	0	select '0123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345678900123456789001234567890012345
+25	#	0	0	select * from information_schema.profiling
+26	#	0	0	select query_id, state, duration from information_schema.profiling
+27	#	0	0	select query_id, sum(duration) from information_schema.profiling group by query_id
+28	#	0	0	select query_id, count(*) from information_schema.profiling group by query_id
+29	#	0	0	select sum(duration) from information_schema.profiling
+30	#	0	0	select query_id, count(*), sum(duration) from information_schema.profiling group by query_id
+31	#	0	0	select CPU_user, CPU_system, Context_voluntary, Context_involuntary, Block_ops_in, Block_ops_out, Messages_sent, Messages_received, Page_faults_major, Page_faults_minor, Swaps, Source_function, Source_file, Source_line from information_schema.profiling
+32	#	0	0	drop table if exists t1, t2, t3
+33	#	0	0	SHOW WARNINGS
+34	#	0	0	create table t1 (id int )
+35	#	0	0	create table t2 (id int not null)
+36	#	0	0	create table t3 (id int not null primary key)
+37	#	0	0	insert into t1 values (1), (2), (3)
+38	#	0	0	insert into t2 values (1), (2), (3)
+39	#	0	0	insert into t3 values (1), (2), (3)
+40	#	0	0	select * from t1
+41	#	0	0	delete from t1
+42	#	0	0	insert into t1 values (1), (2), (3)
+43	#	0	0	insert into t1 values (1), (2), (3)
+44	#	0	0	select * from t1
 set session profiling = ON;
 select @@profiling;
 @@profiling

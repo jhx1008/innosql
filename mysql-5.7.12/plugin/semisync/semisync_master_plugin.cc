@@ -237,6 +237,16 @@ C_MODE_END
 /*
   semisync system variables
  */
+static void fix_rpl_semi_sync_master_keepsyncrepl(MYSQL_THD thd,
+            SYS_VAR *var,
+            void *ptr,
+            const void *val);
+
+static void fix_rpl_semi_sync_master_trysyncrepl(MYSQL_THD thd,
+            SYS_VAR *var,
+            void *ptr,
+            const void *val);
+
 static void fix_rpl_semi_sync_master_timeout(MYSQL_THD thd,
 				      SYS_VAR *var,
 				      void *ptr,
@@ -261,6 +271,20 @@ static void fix_rpl_semi_sync_master_wait_for_slave_count(MYSQL_THD thd,
                                                           SYS_VAR *var,
                                                           void *ptr,
                                                           const void *val);
+
+static MYSQL_SYSVAR_BOOL(keepsyncrepl, rpl_semi_sync_master_keepsyncrepl,
+  PLUGIN_VAR_OPCMDARG,
+  "switch to async replication when transcation wait timeout when 1, or not when 0",
+  NULL,
+  NULL,
+  0);
+
+static MYSQL_SYSVAR_BOOL(trysyncrepl, rpl_semi_sync_master_trysyncrepl,
+  PLUGIN_VAR_OPCMDARG,
+  "whether try to switch sync replication or not when 1, or not when 0",
+  NULL,
+  NULL,
+  1);
 
 static MYSQL_SYSVAR_BOOL(enabled, rpl_semi_sync_master_enabled,
   PLUGIN_VAR_OPCMDARG,
@@ -333,6 +357,8 @@ static SYS_VAR* semi_sync_master_system_vars[]= {
   MYSQL_SYSVAR(trace_level),
   MYSQL_SYSVAR(wait_point),
   MYSQL_SYSVAR(wait_for_slave_count),
+  MYSQL_SYSVAR(trysyncrepl),
+  MYSQL_SYSVAR(keepsyncrepl),
   NULL,
 };
 static void fix_rpl_semi_sync_master_timeout(MYSQL_THD thd,

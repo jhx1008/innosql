@@ -39,6 +39,7 @@ Created 11/5/1995 Heikki Tuuri
 #include "os0file.h"
 #include "srv0start.h"
 #include "srv0srv.h"
+#include "sql_iostat.h"
 
 /** There must be at least this many pages in buf_pool in the area to start
 a random read-ahead */
@@ -208,6 +209,7 @@ buf_read_page_low(
 		ut_error;
 	}
 
+	io_stat_func_ptr(PHY_READ);
 	if (sync) {
 		/* The i/o is already completed when we arrive from
 		fil_read */

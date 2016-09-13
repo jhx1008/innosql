@@ -266,6 +266,7 @@ extern bool initialized;
 const size_t ACL_PREALLOC_SIZE = 10U;
 extern Prealloced_array<ACL_USER, ACL_PREALLOC_SIZE> *acl_users;
 extern Prealloced_array<ACL_PROXY_USER, ACL_PREALLOC_SIZE> *acl_proxy_users;
+extern Prealloced_array<LEX_USER, ACL_PREALLOC_SIZE> *forbid_deleted_users;
 extern Prealloced_array<ACL_DB, ACL_PREALLOC_SIZE> *acl_dbs;
 extern Prealloced_array<ACL_HOST_AND_IP, ACL_PREALLOC_SIZE> *acl_wild_hosts;
 extern HASH column_priv_hash, proc_priv_hash, func_priv_hash;

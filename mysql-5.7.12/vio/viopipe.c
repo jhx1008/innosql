@@ -23,7 +23,7 @@ static size_t wait_overlapped_result(Vio *vio, int timeout)
   timeout_ms= timeout >= 0 ? timeout : INFINITE;
 
   /* Wait for the overlapped operation to be completed. */
-  wait_status= WaitForSingleObject(vio->overlapped.hEvent, timeout_ms);
+  wait_status= WaitForSingleObjectEx(vio->overlapped.hEvent, timeout_ms, TRUE);
 
   /* The operation might have completed, attempt to retrieve the result. */
   if (wait_status == WAIT_OBJECT_0)
@@ -99,7 +99,7 @@ my_bool vio_is_connected_pipe(Vio *vio)
 }
 
 
-int vio_shutdown_pipe(Vio *vio)
+int vio_shutdown_pipe(Vio *vio, int how)
 {
   BOOL ret;
   DBUG_ENTER("vio_shutdown_pipe");
@@ -114,4 +114,17 @@ int vio_shutdown_pipe(Vio *vio)
   vio->mysql_socket= MYSQL_INVALID_SOCKET;
 
   DBUG_RETURN(ret);
+}
+
+int vio_cancel_pipe(Vio *vio, int how)
+{
+  DBUG_ENTER("vio_shutdown_pipe");
+
+  CancelIo(vio->hPipe);
+  CloseHandle(vio->overlapped.hEvent);
+  DisconnectNamedPipe(vio->hPipe);
+
+  vio->inactive= TRUE;
+
+  DBUG_RETURN(0);
 }

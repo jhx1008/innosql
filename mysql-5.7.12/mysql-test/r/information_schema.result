@@ -116,6 +116,8 @@ slave_master_info
 slave_relay_log_info
 slave_worker_info
 slow_log
+sql_stats
+table_stats
 tables_priv
 time_zone
 time_zone_leap_second
@@ -138,6 +140,7 @@ TABLESPACES	TABLESPACES
 TABLE_CONSTRAINTS	TABLE_CONSTRAINTS
 TABLE_PRIVILEGES	TABLE_PRIVILEGES
 TRIGGERS	TRIGGERS
+table_stats	table_stats
 tables_priv	tables_priv
 time_zone	time_zone
 time_zone_leap_second	time_zone_leap_second
@@ -158,6 +161,7 @@ TABLESPACES	TABLESPACES
 TABLE_CONSTRAINTS	TABLE_CONSTRAINTS
 TABLE_PRIVILEGES	TABLE_PRIVILEGES
 TRIGGERS	TRIGGERS
+table_stats	table_stats
 tables_priv	tables_priv
 time_zone	time_zone
 time_zone_leap_second	time_zone_leap_second
@@ -178,6 +182,7 @@ TABLESPACES	TABLESPACES
 TABLE_CONSTRAINTS	TABLE_CONSTRAINTS
 TABLE_PRIVILEGES	TABLE_PRIVILEGES
 TRIGGERS	TRIGGERS
+table_stats	table_stats
 tables_priv	tables_priv
 time_zone	time_zone
 time_zone_leap_second	time_zone_leap_second
@@ -923,7 +928,7 @@ AND table_name not like 'ndb%' AND table_name not like 'innodb_%'
 GROUP BY TABLE_SCHEMA;
 table_schema	count(*)
 information_schema	31
-mysql	28
+mysql	30
 create table t1 (i int, j int);
 create trigger trg1 before insert on t1 for each row
 begin

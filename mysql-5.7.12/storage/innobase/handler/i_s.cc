@@ -54,6 +54,15 @@ Created July 18, 2007 Vasil Dimov
 #include "ut0new.h"
 #include "dict0crea.h"
 
+#include "trx0sys.h"	//for trx_sys_struct
+#include "trx0rseg.h"	//for trx_rseg_t_struct
+#include "trx0undo.h"	//for trx_undo_t_struct, trx_undo_get_first_rec
+#include "trx0types.h"	//for trx_sys, trx_rseg_t, trx_undo_t
+#include "mtr0types.h"	//for mtr_t
+#include "mtr0mtr.h"	//for mtr_struct
+#include "trx0rec.h"	//for trx_undo_rec_get_pars
+#include "page0page.h"	//for page_get_page_no, page_get_space_id
+
 /** structure associates a name string with a file page type and/or buffer
 page state. */
 struct buf_page_desc_t{
@@ -339,7 +348,7 @@ field_store_ulint(
 {
 	int	ret;
 
-	if (n != ULINT_UNDEFINED) {
+	if (n != ULINT_UNDEFINED && n != FIL_NULL) {
 
 		ret = field->store(n, true);
 		field->set_notnull();
@@ -6250,6 +6259,442 @@ struct st_mysql_plugin	i_s_innodb_buffer_page_lru =
 	STRUCT_FLD(flags, 0UL),
 };
 
+
+/* Fields of the dynamic table information_schema.innodb_trx_rollback_segment. */
+static ST_FIELD_INFO	i_s_trx_rollback_segment_fields_info[] =
+{
+	{STRUCT_FLD(field_name, "segment_id"),
+	STRUCT_FLD(field_length, MY_INT64_NUM_DECIMAL_DIGITS),
+	STRUCT_FLD(field_type, MYSQL_TYPE_LONGLONG),
+	STRUCT_FLD(value, 0),
+	STRUCT_FLD(field_flags, MY_I_S_UNSIGNED),	//NOT NULL
+	STRUCT_FLD(old_name, ""),
+	STRUCT_FLD(open_method, SKIP_OPEN_TABLE)},
+	
+	{STRUCT_FLD(field_name, "space"),
+	STRUCT_FLD(field_length, MY_INT64_NUM_DECIMAL_DIGITS),
+	STRUCT_FLD(field_type, MYSQL_TYPE_LONGLONG),
+	STRUCT_FLD(value, 0),
+	STRUCT_FLD(field_flags, MY_I_S_UNSIGNED),
+	STRUCT_FLD(old_name, ""),
+	STRUCT_FLD(open_method, SKIP_OPEN_TABLE)},
+	
+	{STRUCT_FLD(field_name, "page_no"),
+	STRUCT_FLD(field_length, MY_INT64_NUM_DECIMAL_DIGITS),
+	STRUCT_FLD(field_type, MYSQL_TYPE_LONGLONG),
+	STRUCT_FLD(value, 0),
+	STRUCT_FLD(field_flags, MY_I_S_UNSIGNED),
+	STRUCT_FLD(old_name, ""),
+	STRUCT_FLD(open_method, SKIP_OPEN_TABLE)},
+	
+	{STRUCT_FLD(field_name, "last_page_no"),
+	STRUCT_FLD(field_length, MY_INT64_NUM_DECIMAL_DIGITS),
+	STRUCT_FLD(field_type, MYSQL_TYPE_LONGLONG),
+	STRUCT_FLD(value, 0),
+	STRUCT_FLD(field_flags, MY_I_S_UNSIGNED | MY_I_S_MAYBE_NULL),
+	STRUCT_FLD(old_name, ""),
+	STRUCT_FLD(open_method, SKIP_OPEN_TABLE)},
+	
+	{STRUCT_FLD(field_name, "last_offset"),
+	STRUCT_FLD(field_length, MY_INT64_NUM_DECIMAL_DIGITS),
+	STRUCT_FLD(field_type, MYSQL_TYPE_LONGLONG),
+	STRUCT_FLD(value, 0),
+	STRUCT_FLD(field_flags, MY_I_S_UNSIGNED),
+	STRUCT_FLD(old_name, ""),
+	STRUCT_FLD(open_method, SKIP_OPEN_TABLE)},
+	
+	{STRUCT_FLD(field_name, "last_trx_no"),
+	STRUCT_FLD(field_length, TRX_ID_MAX_LEN + 1),
+	STRUCT_FLD(field_type, MYSQL_TYPE_STRING),
+	STRUCT_FLD(value, 0),
+	STRUCT_FLD(field_flags, 0),
+	STRUCT_FLD(old_name, ""),
+	STRUCT_FLD(open_method, SKIP_OPEN_TABLE)},
+	
+	{STRUCT_FLD(field_name, "update_undo_list"),		//number of nodes
+	STRUCT_FLD(field_length, MY_INT64_NUM_DECIMAL_DIGITS),
+	STRUCT_FLD(field_type, MYSQL_TYPE_LONGLONG),
+	STRUCT_FLD(value, 0),
+	STRUCT_FLD(field_flags, MY_I_S_UNSIGNED),
+	STRUCT_FLD(old_name, ""),
+	STRUCT_FLD(open_method, SKIP_OPEN_TABLE)},
+	
+	{STRUCT_FLD(field_name, "update_undo_cached"),
+	STRUCT_FLD(field_length, MY_INT64_NUM_DECIMAL_DIGITS),
+	STRUCT_FLD(field_type, MYSQL_TYPE_LONGLONG),
+	STRUCT_FLD(value, 0),
+	STRUCT_FLD(field_flags, MY_I_S_UNSIGNED),
+	STRUCT_FLD(old_name, ""),
+	STRUCT_FLD(open_method, SKIP_OPEN_TABLE)},
+	
+	{STRUCT_FLD(field_name, "insert_undo_list"),
+	STRUCT_FLD(field_length, MY_INT64_NUM_DECIMAL_DIGITS),
+	STRUCT_FLD(field_type, MYSQL_TYPE_LONGLONG),
+	STRUCT_FLD(value, 0),
+	STRUCT_FLD(field_flags, MY_I_S_UNSIGNED),
+	STRUCT_FLD(old_name, ""),
+	STRUCT_FLD(open_method, SKIP_OPEN_TABLE)},
+	
+	{STRUCT_FLD(field_name, "insert_undo_cached"),
+	STRUCT_FLD(field_length, MY_INT64_NUM_DECIMAL_DIGITS),
+	STRUCT_FLD(field_type, MYSQL_TYPE_LONGLONG),
+	STRUCT_FLD(value, 0),
+	STRUCT_FLD(field_flags, MY_I_S_UNSIGNED),
+	STRUCT_FLD(old_name, ""),
+	STRUCT_FLD(open_method, SKIP_OPEN_TABLE)},
+	
+	END_OF_ST_FIELD_INFO
+};
+
+/*******************************************************************//**
+Fill the dynamic table information_schema.innodb_trx_rollback_segment.
+@return	0 on success, 1 on failure */
+static
+int
+i_s_trx_rollback_segment_fill(
+	/*============*/
+	THD*		thd,	/*!< in: thread */
+	TABLE_LIST*	tables,	/*!< in/out: tables to fill */
+	Item*		)	/*!< in: condition (ignored) */
+{
+	char		str_trx_id[TRX_ID_MAX_LEN + 1];		//string form of trx_id
+	TABLE*	    table = (TABLE *)tables->table;
+
+	DBUG_ENTER("i_s_trx_rollback_segment_fill");
+	
+	  /* deny access to non-superusers */
+	if (check_global_access(thd, PROCESS_ACL)) {
+		DBUG_RETURN(0);
+	
+	}
+	
+	RETURN_IF_INNODB_NOT_STARTED(tables->schema_table_name);
+	
+	for (int i = 0; i < TRX_SYS_N_RSEGS; i++)
+	{
+		const trx_rseg_t *rseg = trx_sys->rseg_array[i];
+		ut_snprintf(str_trx_id, sizeof(str_trx_id), TRX_ID_FMT, rseg->last_trx_no);	//transform rseg->last_trx_no into string 
+		
+		OK(field_store_ulint(table->field[0], rseg->id));
+		OK(field_store_ulint(table->field[1], rseg->space));
+		OK(field_store_ulint(table->field[2], rseg->page_no));
+		OK(field_store_ulint(table->field[3], rseg->last_page_no));
+		OK(field_store_ulint(table->field[4], rseg->last_offset));
+		OK(field_store_string(table->field[5], str_trx_id));
+		OK(field_store_ulint(table->field[6], UT_LIST_GET_LEN(rseg->update_undo_list)));
+		OK(field_store_ulint(table->field[7], UT_LIST_GET_LEN(rseg->update_undo_cached)));
+		OK(field_store_ulint(table->field[8], UT_LIST_GET_LEN(rseg->insert_undo_list)));
+		OK(field_store_ulint(table->field[9], UT_LIST_GET_LEN(rseg->insert_undo_cached)));
+		
+		if (schema_table_store_record(thd, table)) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
+
+/*******************************************************************//**
+Bind the dynamic table information_schema.innodb_trx_rollback_segment.
+@return	0 on success */
+static
+int
+i_s_trx_rollback_segment_init(
+/*============*/
+void*	p)	/*!< in/out: table schema object */
+{
+	DBUG_ENTER("i_s_trx_rollback_segment_init");
+	ST_SCHEMA_TABLE* schema = (ST_SCHEMA_TABLE*)p;
+	
+	schema->fields_info = i_s_trx_rollback_segment_fields_info;
+	schema->fill_table = i_s_trx_rollback_segment_fill;
+	
+	DBUG_RETURN(0);
+}
+
+struct st_mysql_plugin	i_s_innodb_trx_rollback_segment =
+{
+	/* the plugin type (a MYSQL_XXX_PLUGIN value) */
+	/* int */
+	STRUCT_FLD(type, MYSQL_INFORMATION_SCHEMA_PLUGIN),
+	
+	/* pointer to type-specific plugin descriptor */
+	/* void* */
+	STRUCT_FLD(info, &i_s_info),
+	
+	/* plugin name */
+	/* const char* */
+	STRUCT_FLD(name, "INNODB_TRX_ROLLBACK_SEGMENT"),
+	
+	/* plugin author (for SHOW PLUGINS) */
+	/* const char* */
+	STRUCT_FLD(author, netease_plugin_author),
+	
+	/* general descriptive text (for SHOW PLUGINS) */
+	/* const char* */
+	STRUCT_FLD(descr, "Statistics for the InnoDB transaction rollback segments"),
+	
+	/* the plugin license (PLUGIN_LICENSE_XXX) */
+	/* int */
+	STRUCT_FLD(license, PLUGIN_LICENSE_GPL),
+	
+	/* the function to invoke when plugin is loaded */
+	/* int (*)(void*); */
+	STRUCT_FLD(init, i_s_trx_rollback_segment_init),
+	
+	/* the function to invoke when plugin is unloaded */
+	/* int (*)(void*); */
+	STRUCT_FLD(deinit, i_s_common_deinit),
+	
+	/* plugin version (for SHOW PLUGINS) */
+	/* unsigned int */
+	STRUCT_FLD(version, INNODB_VERSION_SHORT),
+	
+	/* struct st_mysql_show_var* */
+	STRUCT_FLD(status_vars, NULL),
+	
+	/* struct st_mysql_sys_var** */
+	STRUCT_FLD(system_vars, NULL),
+	
+	/* reserved for dependency checking */
+	/* void* */
+	STRUCT_FLD(__reserved1, NULL),
+	
+	/* Plugin flags */
+	/* unsigned long */
+	STRUCT_FLD(flags, 0UL),
+};
+
+
+/* Fields of the dynamic table information_schema.innodb_trx_undo. */
+static ST_FIELD_INFO	i_s_trx_undo_fields_info[] =
+{
+	{STRUCT_FLD(field_name, "trx_id"),
+	STRUCT_FLD(field_length, TRX_ID_MAX_LEN + 1),
+	STRUCT_FLD(field_type, MYSQL_TYPE_STRING),
+	STRUCT_FLD(value, 0),
+	STRUCT_FLD(field_flags, 0),	//NOT NULL
+	STRUCT_FLD(old_name, ""),
+	STRUCT_FLD(open_method, SKIP_OPEN_TABLE)},
+	
+	{STRUCT_FLD(field_name, "rseg_id"),
+	STRUCT_FLD(field_length, MY_INT64_NUM_DECIMAL_DIGITS),
+	STRUCT_FLD(field_type, MYSQL_TYPE_LONGLONG),
+	STRUCT_FLD(value, 0),
+	STRUCT_FLD(field_flags, MY_I_S_UNSIGNED),
+	STRUCT_FLD(old_name, ""),
+	STRUCT_FLD(open_method, SKIP_OPEN_TABLE)},
+	
+	{STRUCT_FLD(field_name, "undo_rec_no"),
+	STRUCT_FLD(field_length, MY_INT64_NUM_DECIMAL_DIGITS),
+	STRUCT_FLD(field_type, MYSQL_TYPE_LONGLONG),
+	STRUCT_FLD(value, 0),
+	STRUCT_FLD(field_flags, MY_I_S_UNSIGNED),
+	STRUCT_FLD(old_name, ""),
+	STRUCT_FLD(open_method, SKIP_OPEN_TABLE)},
+	
+	{STRUCT_FLD(field_name, "undo_rec_type"),
+	STRUCT_FLD(field_length, 23),	//max ength of undo_rec_type is 22
+	STRUCT_FLD(field_type, MYSQL_TYPE_STRING),		//?
+	STRUCT_FLD(value, 0),
+	STRUCT_FLD(field_flags, 0),
+	STRUCT_FLD(old_name, ""),
+	STRUCT_FLD(open_method, SKIP_OPEN_TABLE)},
+	
+	{STRUCT_FLD(field_name, "size"),
+	STRUCT_FLD(field_length, MY_INT64_NUM_DECIMAL_DIGITS),
+	STRUCT_FLD(field_type, MYSQL_TYPE_LONGLONG),
+	STRUCT_FLD(value, 0),
+	STRUCT_FLD(field_flags, MY_I_S_UNSIGNED),
+	STRUCT_FLD(old_name, ""),
+	STRUCT_FLD(open_method, SKIP_OPEN_TABLE)},
+	
+	{STRUCT_FLD(field_name, "space"),
+	STRUCT_FLD(field_length, MY_INT64_NUM_DECIMAL_DIGITS),
+	STRUCT_FLD(field_type, MYSQL_TYPE_LONGLONG),
+	STRUCT_FLD(value, 0),
+	STRUCT_FLD(field_flags, MY_I_S_UNSIGNED),
+	STRUCT_FLD(old_name, ""),
+	STRUCT_FLD(open_method, SKIP_OPEN_TABLE)},
+	
+	{STRUCT_FLD(field_name, "page_no"),		//number of nodes
+	STRUCT_FLD(field_length, MY_INT64_NUM_DECIMAL_DIGITS),
+	STRUCT_FLD(field_type, MYSQL_TYPE_LONGLONG),
+	STRUCT_FLD(value, 0),
+	STRUCT_FLD(field_flags, MY_I_S_UNSIGNED),
+	STRUCT_FLD(old_name, ""),
+	STRUCT_FLD(open_method, SKIP_OPEN_TABLE)},
+	
+	{STRUCT_FLD(field_name, "offset"),
+	STRUCT_FLD(field_length, MY_INT64_NUM_DECIMAL_DIGITS),
+	STRUCT_FLD(field_type, MYSQL_TYPE_LONGLONG),
+	STRUCT_FLD(value, 0),
+	STRUCT_FLD(field_flags, MY_I_S_UNSIGNED),
+	STRUCT_FLD(old_name, ""),
+	STRUCT_FLD(open_method, SKIP_OPEN_TABLE)},
+	
+	END_OF_ST_FIELD_INFO
+};
+
+
+/*******************************************************************//**
+Fill the dynamic table information_schema.innodb_trx_undo.
+@return	0 on success, 1 on failure */
+static
+int
+i_s_trx_undo_fill(
+/*============*/
+THD*		thd,	/*!< in: thread */
+TABLE_LIST*	tables,	/*!< in/out: tables to fill */
+Item*		)	/*!< in: condition (ignored) */
+{
+	trx_t*				trx;
+	trx_undo_t* 		undo;
+	trx_undo_rec_t*		undo_rec;
+	trx_undo_rec_t* 	old_undo_rec;
+	ulint				start;
+	ulint				end;
+	ulint 				type;
+	ulint 				cmpl_info;
+	bool 				updated_extern;
+	undo_no_t 			undo_no;
+	table_id_t			table_id;
+	ib_page_t* 			page;
+	ulint 				space;
+	ulint 				page_no;
+	ulint 				offset;
+	int 				i;
+	mtr_t				mtr;
+	char				str_trx_id[TRX_ID_MAX_LEN + 1];		//string form of trx_id
+	TABLE*	            table = (TABLE *)tables->table;
+	const char* 		undo_rec_type[] = {
+		"TRX_UNDO_INSERT_REC",
+		"TRX_UNDO_UPD_EXIST_REC",
+		"TRX_UNDO_UPD_DEL_REC",
+		"TRX_UNDO_DEL_MARK_REC"
+	};
+	DBUG_ENTER("i_s_trx_undo_fill");
+	
+	  /* deny access to non-superusers */
+	if (check_global_access(thd, PROCESS_ACL)) {
+		DBUG_RETURN(0);
+	
+	}
+	RETURN_IF_INNODB_NOT_STARTED(tables->schema_table_name);
+	
+	mtr_start(&mtr);
+	trx = UT_LIST_GET_FIRST(trx_sys->rw_trx_list);
+	while (trx) {
+		ut_snprintf(str_trx_id, sizeof(str_trx_id), TRX_ID_FMT, trx->id);	//transform trx->id into string 
+		for (i = 0; i < 2; ++i) {
+			undo = (0 == i) ? trx->rsegs.m_redo.insert_undo : trx->rsegs.m_redo.update_undo;
+			while (undo) {
+				bool found;
+				undo_rec = trx_undo_get_first_rec(0, fil_space_get_page_size(0, &found), undo->hdr_page_no, undo->hdr_offset, RW_S_LATCH, &mtr);
+				while (undo_rec) {
+					old_undo_rec = undo_rec;
+					trx_undo_rec_get_pars(old_undo_rec, &type, &cmpl_info, &updated_extern, &undo_no, &table_id);
+					end = mach_read_from_2(undo_rec);
+					page = (ib_page_t*)ut_align_down(undo_rec, UNIV_PAGE_SIZE);		//In c++ , void* cann't converse to others automatically
+					start = mach_read_from_2(page + end - 2);
+					offset = undo_rec - page;
+					space = page_get_space_id(page);
+					page_no = page_get_page_no(page);
+					
+					OK(field_store_string(table->field[0], str_trx_id));
+					OK(field_store_ulint(table->field[1], trx->rsegs.m_redo.rseg->id));
+					OK(field_store_ulint(table->field[2], undo_no));
+					OK(field_store_string(table->field[3], undo_rec_type[type - TRX_UNDO_INSERT_REC]));
+					OK(field_store_ulint(table->field[4], end - start));
+					OK(field_store_ulint(table->field[5], space));
+					OK(field_store_ulint(table->field[6], page_no));
+					OK(field_store_ulint(table->field[7], offset));
+					
+					if (schema_table_store_record(thd, table)) {
+						return 1;
+					}
+					undo_rec = trx_undo_get_next_rec(undo_rec, undo->hdr_page_no, undo->hdr_offset, &mtr);
+				}
+				undo = UT_LIST_GET_NEXT(undo_list, undo);
+			}
+		}
+		trx = UT_LIST_GET_NEXT(trx_list, trx);
+	}
+	mtr_commit(&mtr);
+	return 0;
+}
+
+
+/*******************************************************************//**
+Bind the dynamic table information_schema.innodb_trx_undo.
+@return	0 on success */
+static
+int
+i_s_trx_undo_init(
+/*============*/
+void*	p)	/*!< in/out: table schema object */
+{
+	DBUG_ENTER("i_s_trx_rollback_segment_init");
+	ST_SCHEMA_TABLE* schema = (ST_SCHEMA_TABLE*)p;
+	
+	schema->fields_info = i_s_trx_undo_fields_info;
+	schema->fill_table = i_s_trx_undo_fill;
+	
+	DBUG_RETURN(0);
+}
+
+
+struct st_mysql_plugin	i_s_innodb_trx_undo =
+{
+	/* the plugin type (a MYSQL_XXX_PLUGIN value) */
+	  /* int */
+	STRUCT_FLD(type, MYSQL_INFORMATION_SCHEMA_PLUGIN),
+	  /* pointer to type-specific plugin descriptor */
+	  /* void* */
+	STRUCT_FLD(info, &i_s_info),
+	
+	  /* plugin name */
+	  /* const char* */
+	STRUCT_FLD(name, "INNODB_TRX_UNDO"),
+	
+	  /* plugin author (for SHOW PLUGINS) */
+	  /* const char* */
+	STRUCT_FLD(author, netease_plugin_author),
+	
+	  /* general descriptive text (for SHOW PLUGINS) */
+	  /* const char* */
+	STRUCT_FLD(descr, "Statistics for the InnoDB transaction undo"),
+	
+	  /* the plugin license (PLUGIN_LICENSE_XXX) */
+	  /* int */
+	STRUCT_FLD(license, PLUGIN_LICENSE_GPL),
+	
+	  /* the function to invoke when plugin is loaded */
+	  /* int (*)(void*); */
+	STRUCT_FLD(init, i_s_trx_undo_init),
+	
+	  /* the function to invoke when plugin is unloaded */
+	  /* int (*)(void*); */
+	STRUCT_FLD(deinit, i_s_common_deinit),
+	
+	  /* plugin version (for SHOW PLUGINS) */
+	  /* unsigned int */
+	STRUCT_FLD(version, INNODB_VERSION_SHORT),
+	
+	  /* struct st_mysql_show_var* */
+	STRUCT_FLD(status_vars, NULL),
+	
+	  /* struct st_mysql_sys_var** */
+	STRUCT_FLD(system_vars, NULL),
+	
+	  /* reserved for dependency checking */
+	  /* void* */
+	STRUCT_FLD(__reserved1, NULL),
+	
+	  /* Plugin flags */
+	  /* unsigned long */
+	STRUCT_FLD(flags, 0UL),
+};
 /*******************************************************************//**
 Unbind a dynamic INFORMATION_SCHEMA table.
 @return 0 on success */

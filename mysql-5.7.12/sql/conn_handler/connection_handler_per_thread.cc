@@ -28,6 +28,7 @@
 #include "sql_parse.h"                   // do_command
 #include "sql_thd_internal_api.h"        // thd_set_thread_stack
 #include "log.h"                         // Error_log_throttle
+#include "sql_statistics.h"
 
 
 // Initialize static members
@@ -246,7 +247,8 @@ extern "C" void *handle_connection(void *arg)
     connection_errors_internal++;
     channel_info->send_error_and_close_channel(ER_OUT_OF_RESOURCES, 0, false);
     handler_manager->inc_aborted_connects();
-    Connection_handler_manager::dec_connection_count();
+    Connection_handler_manager
+      ::dec_connection_count(channel_info->is_on_extra_port());
     delete channel_info;
     my_thread_exit(0);
     return NULL;
@@ -254,12 +256,14 @@ extern "C" void *handle_connection(void *arg)
 
   for (;;)
   {
+    // Save this here as init_new_thd destroys channel_info
+    bool extra_port_connection= channel_info->is_on_extra_port();
     THD *thd= init_new_thd(channel_info);
     if (thd == NULL)
     {
       connection_errors_internal++;
       handler_manager->inc_aborted_connects();
-      Connection_handler_manager::dec_connection_count();
+      Connection_handler_manager::dec_connection_count(extra_port_connection);
       break; // We are out of resources, no sense in continuing.
     }
 
@@ -291,12 +295,16 @@ extern "C" void *handle_connection(void *arg)
 
     thd_manager->add_thd(thd);
 
-    if (thd_prepare_connection(thd))
+    if (thd_prepare_connection(thd, extra_port_connection))
       handler_manager->inc_aborted_connects();
     else
     {
       while (thd_connection_alive(thd))
       {
+		    if (thd->m_sql_info != NULL)
+        {
+		      statistics_reset_sql_info(thd->m_sql_info, thd->charset()->number);
+        }
         mysql_audit_release(thd);
         if (do_command(thd))
           break;
@@ -312,7 +320,7 @@ extern "C" void *handle_connection(void *arg)
     ERR_remove_state(0);
 
     thd_manager->remove_thd(thd);
-    Connection_handler_manager::dec_connection_count();
+    Connection_handler_manager::dec_connection_count(extra_port_connection);
 
 #ifdef HAVE_PSI_THREAD_INTERFACE
     /*
@@ -417,7 +425,8 @@ handle_error:
                       error);
     channel_info->send_error_and_close_channel(ER_CANT_CREATE_THREAD,
                                                error, true);
-    Connection_handler_manager::dec_connection_count();
+    Connection_handler_manager
+      ::dec_connection_count(channel_info->is_on_extra_port());
     DBUG_RETURN(true);
   }
 

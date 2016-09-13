@@ -18,14 +18,16 @@
 #include "semisync_master.h"
 #if defined(ENABLED_DEBUG_SYNC)
 #include "debug_sync.h"
-#include "sql_class.h"
 #endif
 
+#include "sql_class.h"
 #define TIME_THOUSAND 1000
 #define TIME_MILLION  1000000
 #define TIME_BILLION  1000000000
 
 /* This indicates whether semi-synchronous replication is enabled. */
+char rpl_semi_sync_master_keepsyncrepl = 0;
+char rpl_semi_sync_master_trysyncrepl = 1;
 char rpl_semi_sync_master_enabled;
 unsigned long rpl_semi_sync_master_timeout;
 unsigned long rpl_semi_sync_master_trace_level;
@@ -631,7 +633,7 @@ void ReplSemiSyncMaster::reportReplyBinlog(const char *log_file_name,
   if (!getMasterEnabled())
     goto l_end;
 
-  if (!is_on())
+  if (!is_on() && rpl_semi_sync_master_trysyncrepl)
     /* We check to see whether we can switch semi-sync ON. */
     try_switch_on(log_file_name, log_file_pos);
 
@@ -740,6 +742,8 @@ int ReplSemiSyncMaster::commitTrx(const char* trx_wait_binlog_name,
     int wait_result;
 
     set_timespec(&start_ts, 0);
+
+    current_thd->rpl_wait_begin_usec = my_micro_time();
     /* This is the real check inside the mutex. */
     if (!getMasterEnabled() || !is_on())
       goto l_end;
@@ -847,7 +851,7 @@ int ReplSemiSyncMaster::commitTrx(const char* trx_wait_binlog_name,
       entry->n_waiters--;
       rpl_semi_sync_master_wait_sessions--;
       
-      if (wait_result != 0)
+      if (wait_result != 0 && !rpl_semi_sync_master_keepsyncrepl)
       {
         /* This is a real wait timeout. */
         sql_print_warning("Timeout waiting for reply of binlog (file: %s, pos: %lu), "
@@ -900,6 +904,7 @@ l_end:
 
   unlock();
   THD_EXIT_COND(NULL, & old_stage);
+  current_thd->rpl_wait_begin_usec = 0;
   return function_exit(kWho, 0);
 }
 void ReplSemiSyncMaster::set_wait_no_slave(const void *val)

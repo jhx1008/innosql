@@ -91,7 +91,7 @@ Status	Duration	Messages_sent	Messages_received
 Warnings:
 Warning	1287	'SHOW PROFILE' is deprecated and will be removed in a future release. Please use Performance Schema instead
 SHOW PROFILES;
-Query_ID	Duration	Query
+Query_ID	Duration	Logical_reads	Physical_reads	Query
 Warnings:
 Warning	1287	'SHOW PROFILES' is deprecated and will be removed in a future release. Please use Performance Schema instead
 # --plugin-xyz
@@ -134,6 +134,8 @@ mysql.slave_master_info                            OK
 mysql.slave_relay_log_info                         OK
 mysql.slave_worker_info                            OK
 mysql.slow_log                                     OK
+mysql.sql_stats                                    OK
+mysql.table_stats                                  OK
 mysql.tables_priv                                  OK
 mysql.time_zone                                    OK
 mysql.time_zone_leap_second                        OK
@@ -174,6 +176,8 @@ mysql.slave_master_info                            OK
 mysql.slave_relay_log_info                         OK
 mysql.slave_worker_info                            OK
 mysql.slow_log                                     OK
+mysql.sql_stats                                    OK
+mysql.table_stats                                  OK
 mysql.tables_priv                                  OK
 mysql.time_zone                                    OK
 mysql.time_zone_leap_second                        OK
@@ -210,6 +214,8 @@ mysql.slave_master_info                            OK
 mysql.slave_relay_log_info                         OK
 mysql.slave_worker_info                            OK
 mysql.slow_log                                     OK
+mysql.sql_stats                                    OK
+mysql.table_stats                                  OK
 mysql.tables_priv                                  OK
 mysql.time_zone                                    OK
 mysql.time_zone_leap_second                        OK

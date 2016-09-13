@@ -218,6 +218,8 @@ private:
 
   query_id_t profiling_query_id;        /* Session-specific id. */
   LEX_STRING m_query_source;
+  ulong logical_reads;
+  ulong physical_reads;
 
   double m_start_time_usecs;
   double m_end_time_usecs;

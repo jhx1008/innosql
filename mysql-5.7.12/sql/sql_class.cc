@@ -51,7 +51,7 @@
 #include "rpl_rli_pdb.h"                     // Slave_worker
 #include "rpl_slave_commit_order_manager.h"
 #endif
-
+#include "sql_statistics.h"
 #include "pfs_file_provider.h"
 #include "mysql/psi/mysql_file.h"
 
@@ -420,7 +420,7 @@ bool Foreign_key::validate(List<Create_field> &table_fields)
 */
 void *thd_get_scheduler_data(THD *thd)
 {
-  return thd->scheduler.data;
+  return thd->event_scheduler.data;
 }
 
 /**
@@ -431,7 +431,7 @@ void *thd_get_scheduler_data(THD *thd)
 */
 void thd_set_scheduler_data(THD *thd, void *data)
 {
-  thd->scheduler.data= data;
+  thd->event_scheduler.data= data;
 }
 
 PSI_thread* THD::get_psi()
@@ -1118,7 +1118,8 @@ THD::THD(bool enable_plugins)
    m_query_rewrite_plugin_da_ptr(&m_query_rewrite_plugin_da),
    m_stmt_da(&main_da),
    duplicate_slave_uuid(false),
-   is_a_srv_session_thd(false)
+   is_a_srv_session_thd(false),
+   rpl_wait_begin_usec(0)
 {
   main_lex.reset();
   set_psi(NULL);
@@ -1131,6 +1132,11 @@ THD::THD(bool enable_plugins)
   thread_stack= 0;
   m_catalog.str= "std";
   m_catalog.length= 3;
+  // per-thread and one-thread scheduler callbacks are no-ops, so NULL works
+  // for them, threadpool scheduler will change this for its THDs.
+  scheduler= NULL;
+  event_scheduler.data= 0;
+  skip_wait_timeout= false;
   m_security_ctx= &m_main_security_ctx;
   no_errors= 0;
   password= 0;
@@ -1247,6 +1253,7 @@ THD::THD(bool enable_plugins)
                                               max_digest_length,
                                               MYF(MY_WME));
   }
+  m_sql_info = NULL;
 }
 
 
@@ -1891,6 +1898,10 @@ THD::~THD()
     rli_slave->cleanup_after_session();
 #endif
 
+  if (m_sql_info != NULL)
+  {
+    statistics_destory_sql_info(m_sql_info);
+  }
   free_root(&main_mem_root, MYF(0));
 
   if (m_token_array != NULL)
@@ -2007,39 +2018,13 @@ void THD::awake(THD::killed_state state_to_set)
   {
     if (this != current_thd)
     {
-      /*
-        Before sending a signal, let's close the socket of the thread
-        that is being killed ("this", which is not the current thread).
-        This is to make sure it does not block if the signal is lost.
-        This needs to be done only on platforms where signals are not
-        a reliable interruption mechanism.
-
-        Note that the downside of this mechanism is that we could close
-        the connection while "this" target thread is in the middle of
-        sending a result to the application, thus violating the client-
-        server protocol.
-
-        On the other hand, without closing the socket we have a race
-        condition. If "this" target thread passes the check of
-        thd->killed, and then the current thread runs through
-        THD::awake(), sets the 'killed' flag and completes the
-        signaling, and then the target thread runs into read(), it will
-        block on the socket. As a result of the discussions around
-        Bug#37780, it has been decided that we accept the race
-        condition. A second KILL awakes the target from read().
-
-        If we are killing ourselves, we know that we are not blocked.
-        We also know that we will check thd->killed before we go for
-        reading the next statement.
-      */
-
-      shutdown_active_vio();
+      if (active_vio)
+        vio_cancel(active_vio, SHUT_RDWR);
     }
 
     /* Send an event to the scheduler that a thread should be killed. */
     if (!slave_thread)
-      MYSQL_CALLBACK(Connection_handler_manager::event_functions,
-                     post_kill_notification, (this));
+      MYSQL_CALLBACK(this->scheduler, post_kill_notification, (this));
   }
 
   /* Interrupt target waiting inside a storage engine. */
@@ -2548,7 +2533,7 @@ void THD::shutdown_active_vio()
 #ifndef EMBEDDED_LIBRARY
   if (active_vio)
   {
-    vio_shutdown(active_vio);
+    vio_shutdown(active_vio, SHUT_RDWR);
     active_vio = 0;
   }
 #endif
@@ -3762,7 +3747,12 @@ void THD::end_attachable_transaction()
 extern "C" int thd_killed(const MYSQL_THD thd)
 {
   if (thd == NULL)
-    return current_thd->killed;
+  {
+    MYSQL_THD curr_thd= current_thd;
+    if (curr_thd)
+      return curr_thd->killed;
+    return FALSE;
+  }
   return thd->killed;
 }
 
@@ -3958,8 +3948,13 @@ extern "C" void thd_pool_wait_end(MYSQL_THD thd);
 */
 extern "C" void thd_wait_begin(MYSQL_THD thd, int wait_type)
 {
-  MYSQL_CALLBACK(Connection_handler_manager::event_functions,
-                 thd_wait_begin, (thd, wait_type));
+  if (!thd)
+  {
+    thd= current_thd;
+    if (unlikely(!thd))
+      return;
+  }
+  MYSQL_CALLBACK(thd->scheduler, thd_wait_begin, (thd, wait_type));
 }
 
 /**
@@ -3967,11 +3962,17 @@ extern "C" void thd_wait_begin(MYSQL_THD thd, int wait_type)
   when they waking up from a sleep/stall.
 
   @param  thd   Thread handle
+  Can be NULL, in this case current THD is used.
 */
 extern "C" void thd_wait_end(MYSQL_THD thd)
 {
-  MYSQL_CALLBACK(Connection_handler_manager::event_functions,
-                 thd_wait_end, (thd));
+  if (!thd)
+  {
+    thd= current_thd;
+    if (unlikely(!thd))
+      return;
+  }
+  MYSQL_CALLBACK(thd->scheduler, thd_wait_end, (thd));
 }
 #else
 extern "C" void thd_wait_begin(MYSQL_THD thd, int wait_type)
@@ -4175,6 +4176,16 @@ void THD::set_examined_row_count(ha_rows count)
 {
   m_examined_row_count= count;
   MYSQL_SET_STATEMENT_ROWS_EXAMINED(m_statement_psi, m_examined_row_count);
+}
+
+void THD::set_logical_reads(ha_rows reads)
+{
+  m_logical_reads = reads;
+}
+
+void THD::set_physical_reads(ha_rows reads)
+{
+  m_physical_reads = reads;
 }
 
 void THD::inc_sent_row_count(ha_rows count)

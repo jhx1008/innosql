@@ -30,6 +30,8 @@ slave_master_info
 slave_relay_log_info
 slave_worker_info
 slow_log
+sql_stats
+table_stats
 tables_priv
 time_zone
 time_zone_leap_second

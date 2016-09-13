@@ -425,7 +425,7 @@ public:
   bool is_log_table_enabled(enum_log_table_type log_type) const
   {
     if (log_type == QUERY_LOG_SLOW)
-      return (opt_slow_log && (log_output_options & LOG_TABLE));
+      return ((opt_slow_log | opt_slow_io_log) && (log_output_options & LOG_TABLE));
     else if (log_type == QUERY_LOG_GENERAL)
       return (opt_general_log && (log_output_options & LOG_TABLE));
     DBUG_ASSERT(false);

@@ -531,7 +531,8 @@ int set_default_auth_plugin(char *plugin_name, size_t plugin_name_length);
 void acl_log_connect(const char *user, const char *host, const char *auth_as,
 	const char *db, THD *thd,
 enum enum_server_command command);
-int acl_authenticate(THD *thd, enum_server_command command);
+int acl_authenticate(THD *thd, enum_server_command command,
+                     bool extra_port_connection);
 bool acl_check_host(const char *host, const char *ip);
 
 /*
@@ -633,6 +634,9 @@ int fill_schema_user_privileges(THD *thd, TABLE_LIST *tables, Item *cond);
 int fill_schema_schema_privileges(THD *thd, TABLE_LIST *tables, Item *cond);
 int fill_schema_table_privileges(THD *thd, TABLE_LIST *tables, Item *cond);
 int fill_schema_column_privileges(THD *thd, TABLE_LIST *tables, Item *cond);
+bool is_forbid_deleted_user(const char *user, const char *host);
+bool contain_forbid_deleted_user(const char *record);
+bool is_forbid_users_empty();
 const ACL_internal_schema_access *
 get_cached_schema_access(GRANT_INTERNAL_INFO *grant_internal_info,
                          const char *schema_name);

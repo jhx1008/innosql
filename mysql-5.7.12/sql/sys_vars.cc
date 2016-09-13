@@ -59,10 +59,14 @@
 #include "sql_time.h"                    // global_date_format
 #include "table_cache.h"                 // Table_cache_manager
 #include "transaction.h"                 // trans_commit_stmt
+#include "threadpool.h"
 
+#include "sql_statistics.h"
 #ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
 #include "../storage/perfschema/pfs_server.h"
 #endif /* WITH_PERFSCHEMA_STORAGE_ENGINE */
+
+#define MAX_CONNECTIONS 100000
 
 TYPELIB bool_typelib={ array_elements(bool_values)-1, "", bool_values, 0 };
 
@@ -2150,6 +2154,13 @@ static Sys_var_double Sys_long_query_time(
        NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0),
        ON_UPDATE(update_cached_long_query_time));
 
+static Sys_var_ulong Sys_long_query_io(
+	 "long_query_io",
+	 "Log all queries that have taken more than long_query_io "
+	  "to execute to file. The argument will be treated as a decimal value ",
+	 GLOBAL_VAR(long_query_io_ulong), CMD_LINE(REQUIRED_ARG),
+	 VALID_RANGE(0, ULONG_MAX), DEFAULT(100), BLOCK_SIZE(1));
+
 static bool fix_low_prio_updates(sys_var *self, THD *thd, enum_var_type type)
 {
   if (type == OPT_SESSION)
@@ -2294,7 +2305,7 @@ static Sys_var_ulong Sys_max_binlog_size(
 static Sys_var_ulong Sys_max_connections(
        "max_connections", "The number of simultaneous clients allowed",
        GLOBAL_VAR(max_connections), CMD_LINE(REQUIRED_ARG),
-       VALID_RANGE(1, 100000),
+       VALID_RANGE(1, MAX_CONNECTIONS),
        DEFAULT(MAX_CONNECTIONS_DEFAULT),
        BLOCK_SIZE(1),
        NO_MUTEX_GUARD,
@@ -2312,6 +2323,19 @@ static Sys_var_ulong Sys_max_connect_errors(
        GLOBAL_VAR(max_connect_errors), CMD_LINE(REQUIRED_ARG),
        VALID_RANGE(1, ULONG_MAX), DEFAULT(100),
        BLOCK_SIZE(1));
+
+static Sys_var_uint Sys_extra_port(
+       "extra_port",
+       "Extra port number to use for tcp connections in a "
+       "one-thread-per-connection manner. 0 means don't use another port",
+       READ_ONLY GLOBAL_VAR(mysqld_extra_port), CMD_LINE(REQUIRED_ARG),
+       VALID_RANGE(0, UINT_MAX32), DEFAULT(0), BLOCK_SIZE(1));
+
+static Sys_var_ulong Sys_extra_max_connections(
+       "extra_max_connections", "The number of connections on extra-port",
+       GLOBAL_VAR(extra_max_connections), CMD_LINE(REQUIRED_ARG),
+       VALID_RANGE(1, MAX_CONNECTIONS), DEFAULT(1), BLOCK_SIZE(1),
+       NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0), ON_UPDATE(0));
 
 static Sys_var_long Sys_max_digest_length(
        "max_digest_length",
@@ -3069,6 +3093,13 @@ static Sys_var_mybool Sys_require_secure_transport(
 
 #endif
 
+static Sys_var_mybool Sys_innodb_only(
+       "innodb_only",
+       "if this flag is true, only innodb table can be created"
+       "any other tables created by using engine will occur errors",
+       GLOBAL_VAR(opt_innodb_only), CMD_LINE(OPT_ARG), DEFAULT(FALSE),
+       NO_MUTEX_GUARD, NOT_IN_BINLOG,ON_CHECK(0), ON_UPDATE(0));
+
 /**
   The read_only boolean is always equal to the opt_readonly boolean except
   during fix_read_only(); when that function is entered, opt_readonly is
@@ -3249,13 +3280,27 @@ static Sys_var_ulong Sys_trans_prealloc_size(
 #ifndef EMBEDDED_LIBRARY
 static const char *thread_handling_names[]=
 {
-  "one-thread-per-connection", "no-threads", "loaded-dynamically",
+  "one-thread-per-connection", "no-threads",
+#ifdef HAVE_POOL_OF_THREADS
+  "pool-of-threads",
+#endif
   0
 };
+
+#if defined (_WIN32) && defined (HAVE_POOL_OF_THREADS)
+/* Windows is using OS threadpool, so we're pretty sure it works well */
+#define DEFAULT_THREAD_HANDLING 2
+#else
+#define DEFAULT_THREAD_HANDLING 0
+#endif
+
 static Sys_var_enum Sys_thread_handling(
        "thread_handling",
        "Define threads usage for handling queries, one of "
-       "one-thread-per-connection, no-threads, loaded-dynamically"
+       "one-thread-per-connection, no-threads"
+#ifdef HAVE_POOL_OF_THREADS
+       ", pool-of-threads"
+#endif
        , READ_ONLY GLOBAL_VAR(Connection_handler_manager::thread_handling),
        CMD_LINE(REQUIRED_ARG), thread_handling_names, DEFAULT(0));
 #endif // !EMBEDDED_LIBRARY
@@ -3904,6 +3949,127 @@ static Sys_var_ulong Sys_thread_cache_size(
        CMD_LINE(REQUIRED_ARG, OPT_THREAD_CACHE_SIZE),
        VALID_RANGE(0, 16384), DEFAULT(0), BLOCK_SIZE(1));
 #endif // !EMBEDDED_LIBRARY
+
+#ifdef HAVE_POOL_OF_THREADS
+
+static bool fix_tp_max_threads(sys_var *, THD *, enum_var_type)
+{
+#ifdef _WIN32
+  tp_set_max_threads(threadpool_max_threads);
+#endif
+  return false;
+}
+
+
+#ifdef _WIN32
+static bool fix_tp_min_threads(sys_var *, THD *, enum_var_type)
+{
+  tp_set_min_threads(threadpool_min_threads);
+  return false;
+}
+#endif
+
+
+#ifndef  _WIN32
+static bool fix_threadpool_size(sys_var*, THD*, enum_var_type)
+{
+  tp_set_threadpool_size(threadpool_size);
+  return false;
+}
+
+
+static bool fix_threadpool_stall_limit(sys_var*, THD*, enum_var_type)
+{
+  tp_set_threadpool_stall_limit(threadpool_stall_limit);
+  return false;
+}
+#endif
+
+static inline int my_getncpus()
+{
+#ifdef _SC_NPROCESSORS_ONLN
+  return sysconf(_SC_NPROCESSORS_ONLN);
+#else
+  return 2; /* The value returned by the old my_getncpus implementation */
+#endif
+}
+
+#ifdef _WIN32
+static Sys_var_uint Sys_threadpool_min_threads(
+  "thread_pool_min_threads",
+  "Minimum number of threads in the thread pool.",
+  GLOBAL_VAR(threadpool_min_threads), CMD_LINE(REQUIRED_ARG),
+  VALID_RANGE(1, 256), DEFAULT(1), BLOCK_SIZE(1),
+  NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0),
+  ON_UPDATE(fix_tp_min_threads)
+  );
+#else
+static Sys_var_uint Sys_threadpool_idle_thread_timeout(
+  "thread_pool_idle_timeout",
+  "Timeout in seconds for an idle thread in the thread pool."
+  "Worker thread will be shut down after timeout",
+  GLOBAL_VAR(threadpool_idle_timeout), CMD_LINE(REQUIRED_ARG),
+  VALID_RANGE(1, UINT_MAX), DEFAULT(60), BLOCK_SIZE(1)
+);
+static Sys_var_uint Sys_threadpool_oversubscribe(
+  "thread_pool_oversubscribe",
+  "How many additional active worker threads in a group are allowed.",
+  GLOBAL_VAR(threadpool_oversubscribe), CMD_LINE(REQUIRED_ARG),
+  VALID_RANGE(1, 1000), DEFAULT(3), BLOCK_SIZE(1)
+);
+static Sys_var_uint Sys_threadpool_size(
+ "thread_pool_size",
+ "Number of thread groups in the pool. "
+ "This parameter is roughly equivalent to maximum number of concurrently "
+ "executing threads (threads in a waiting state do not count as executing).",
+  GLOBAL_VAR(threadpool_size), CMD_LINE(REQUIRED_ARG),
+  VALID_RANGE(1, MAX_THREAD_GROUPS), DEFAULT(my_getncpus()), BLOCK_SIZE(1),
+  NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0),
+  ON_UPDATE(fix_threadpool_size)
+);
+static Sys_var_uint Sys_threadpool_stall_limit(
+ "thread_pool_stall_limit",
+ "Maximum query execution time in milliseconds,"
+ "before an executing non-yielding thread is considered stalled."
+ "If a worker thread is stalled, additional worker thread "
+ "may be created to handle remaining clients.",
+  GLOBAL_VAR(threadpool_stall_limit), CMD_LINE(REQUIRED_ARG),
+  VALID_RANGE(10, UINT_MAX), DEFAULT(500), BLOCK_SIZE(1),
+  NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0), 
+  ON_UPDATE(fix_threadpool_stall_limit)
+);
+static Sys_var_uint Sys_threadpool_high_prio_tickets(
+  "thread_pool_high_prio_tickets",
+  "Number of tickets to enter the high priority event queue for each "
+  "transaction.",
+  SESSION_VAR(threadpool_high_prio_tickets), CMD_LINE(REQUIRED_ARG),
+  VALID_RANGE(0, UINT_MAX), DEFAULT(UINT_MAX), BLOCK_SIZE(1)
+);
+
+static Sys_var_enum Sys_threadpool_high_prio_mode(
+  "thread_pool_high_prio_mode",
+  "High priority queue mode: one of 'transactions', 'statements' or 'none'. "
+  "In the 'transactions' mode the thread pool uses both high- and low-priority "
+  "queues depending on whether an event is generated by an already started "
+  "transaction and whether it has any high priority tickets (see "
+  "thread_pool_high_prio_tickets). In the 'statements' mode all events (i.e. "
+  "individual statements) always go to the high priority queue, regardless of "
+  "the current transaction state and high priority tickets. "
+  "'none' is the opposite of 'statements', i.e. disables the high priority queue "
+  "completely.",
+  SESSION_VAR(threadpool_high_prio_mode), CMD_LINE(REQUIRED_ARG),
+  threadpool_high_prio_mode_names, DEFAULT(TP_HIGH_PRIO_MODE_TRANSACTIONS));
+
+#endif /* !WIN32 */
+static Sys_var_uint Sys_threadpool_max_threads(
+  "thread_pool_max_threads",
+  "Maximum allowed number of worker threads in the thread pool",
+   GLOBAL_VAR(threadpool_max_threads), CMD_LINE(REQUIRED_ARG),
+   VALID_RANGE(1, MAX_CONNECTIONS), DEFAULT(MAX_CONNECTIONS), BLOCK_SIZE(1),
+   NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0), 
+   ON_UPDATE(fix_tp_max_threads)
+);
+#endif /* HAVE_POOL_OF_THREADS */
 
 /**
   Can't change the 'next' tx_isolation if we are already in a
@@ -4808,6 +4974,9 @@ static bool fix_slow_log_state(sys_var *self, THD *thd, enum_var_type type)
 
   if (!opt_slow_log)
   {
+	slow_query_type &= ~0x0001;
+	if (opt_slow_io_log)
+	  return false;
     mysql_mutex_unlock(&LOCK_global_system_variables);
     query_logger.deactivate_log_handler(QUERY_LOG_SLOW);
     mysql_mutex_lock(&LOCK_global_system_variables);
@@ -4815,14 +4984,58 @@ static bool fix_slow_log_state(sys_var *self, THD *thd, enum_var_type type)
   }
   else
   {
+	slow_query_type |= 0x0001;
     mysql_mutex_unlock(&LOCK_global_system_variables);
     bool res= query_logger.activate_log_handler(thd, QUERY_LOG_SLOW);
     mysql_mutex_lock(&LOCK_global_system_variables);
-    if (res)
-      opt_slow_log= false;
+	if (res)
+	{
+	  opt_slow_log = false;
+	  opt_slow_io_log = false;
+	  slow_query_type = 0;
+	}
     return res;
   }
 }
+
+static bool update_slow_query_type(sys_var *self, THD *thd, enum_var_type type)
+{
+  bool res;
+  bool *slow_log_ptr, *io_log_ptr, newval, oldval;
+  opt_slow_log = slow_query_type & 0x0001;
+  opt_slow_io_log = (slow_query_type & 0x0002) >> 1;
+  slow_log_ptr = &opt_slow_log;
+  io_log_ptr = &opt_slow_io_log;
+  oldval = query_logger.is_log_file_enabled(QUERY_LOG_SLOW);
+  newval = opt_slow_log || opt_slow_io_log;
+  if (oldval == newval)
+  {
+    return false;
+  }
+  //*slow_log_ptr = *io_log_ptr = oldval;
+  mysql_mutex_unlock(&LOCK_global_system_variables);
+  if (!newval)
+  {
+	query_logger.deactivate_log_handler(QUERY_LOG_SLOW);
+	res = false;
+  }
+  else
+  {
+	res = query_logger.activate_log_handler(thd, QUERY_LOG_SLOW);
+  }
+  mysql_mutex_lock(&LOCK_global_system_variables);
+  return res;
+}
+
+static Sys_var_ulong Sys_slow_query_type(
+	 "slow_query_type",
+	 "Log slow queries to a table or log file. Defaults logging to a file "
+	  "hostname-slow.log or a table mysql.slow_log if --log-output=TABLE is "
+	  "used. Must be enabled to activate other slow log options",
+	 GLOBAL_VAR(slow_query_type), CMD_LINE(OPT_ARG),
+	 VALID_RANGE(0, 3), DEFAULT(0), BLOCK_SIZE(1), NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0),
+	 ON_UPDATE(update_slow_query_type));
+
 static Sys_var_mybool Sys_slow_query_log(
        "slow_query_log",
        "Log slow queries to a table or log file. Defaults logging to a file "
@@ -5628,3 +5841,91 @@ static Sys_var_charptr Sys_disabled_storage_engines(
        READ_ONLY GLOBAL_VAR(opt_disabled_storage_engines),
        CMD_LINE(REQUIRED_ARG), IN_SYSTEM_CHARSET,
        DEFAULT(""));
+
+static Sys_var_charptr Sys_user_list_string(
+	  "user_list_string", "users can't be deleted or dropped",
+	  PREALLOCATED READ_ONLY GLOBAL_VAR(user_list_string), CMD_LINE(REQUIRED_ARG),
+	  IN_FS_CHARSET, DEFAULT(""), NO_MUTEX_GUARD, NOT_IN_BINLOG);
+
+static Sys_var_ulong Sys_super_connections_after_max(
+	  "super_connections_after_max",
+	  "the number of connections who has the super private allow, when the connections is full",
+	  GLOBAL_VAR(super_connections_after_max), NO_CMD_LINE,
+	  VALID_RANGE(1, 100), DEFAULT(1), BLOCK_SIZE(1));
+
+static Sys_var_ulong Sys_statistics_max_sql_size(
+  "statistics_max_sql_size",
+  "The max size of the sql, if the size greater than this value "
+  "this sql will not to be statistics",
+  READ_ONLY GLOBAL_VAR(statistics_max_sql_size), CMD_LINE(REQUIRED_ARG),
+  VALID_RANGE(0, 10240L), DEFAULT(1024), BLOCK_SIZE(1));
+
+static Sys_var_ulong Sys_statistics_expire_duration(
+  "statistics_expire_duration",
+  "The stats info stored in mysql.sql_stats and mysql.table_stats duration "
+  "out of this time, the expire info will be deleted, unit day",
+  GLOBAL_VAR(statistics_expire_duration), CMD_LINE(REQUIRED_ARG),
+  VALID_RANGE(1, LONG_MAX), DEFAULT(3), BLOCK_SIZE(1));
+
+static Sys_var_ulong Sys_statistics_max_sql_count(
+  "statistics_max_sql_count",
+  "The max count of the sql, when the count of sql reach this size "
+  "the new sql will be discard or replace another",
+  GLOBAL_VAR(statistics_max_sql_count), CMD_LINE(REQUIRED_ARG),
+  VALID_RANGE(0, MAX_SQL_COUNT), DEFAULT(100), BLOCK_SIZE(1));
+
+static Sys_var_ulong Sys_statistics_output_cycle(
+  "statistics_output_cycle",
+  "The cycle when output the information into the tables "
+  "default 1 hour",
+  GLOBAL_VAR(statistics_output_cycle), CMD_LINE(REQUIRED_ARG),
+  VALID_RANGE(1, LONG_MAX), DEFAULT(1), BLOCK_SIZE(1));
+
+static bool update_output_now(sys_var *self, THD *thd, enum_var_type type)
+{
+  output_now(statistics_output_now);
+  statistics_output_now = false;
+  return false;
+}
+
+static Sys_var_mybool Sys_statistics_output_now(
+   "statistics_output_now",
+   "output the statistics info immediately "
+   "do not wait for the output cycle",
+   GLOBAL_VAR(statistics_output_now),
+   CMD_LINE(OPT_ARG), DEFAULT(FALSE),
+   NO_MUTEX_GUARD,NOT_IN_BINLOG, ON_CHECK(0), ON_UPDATE(update_output_now));
+
+static Sys_var_mybool Sys_statistics_shutdown_fast(
+  "statistics_shutdown_fast",
+  "shutdown fast, do not output the statistics infos in memory",
+  GLOBAL_VAR(statistics_shutdown_fast),
+  CMD_LINE(OPT_ARG), DEFAULT(FALSE));
+
+static Sys_var_mybool Sys_statistics_plugin_status(
+  "statistics_plugin_status",
+  "statistics plugin switch, ON/OFF",
+  GLOBAL_VAR(statistics_plugin_status),
+  CMD_LINE(OPT_ARG), DEFAULT(FALSE));
+
+static bool update_exclude_db(sys_var *self, THD *thd, enum_var_type type)
+{
+  return update_exclude_db_list();
+}
+  
+static Sys_var_charptr Sys_statistics_exclude_db(
+  "statistics_exclude_db", "exclude database list, separate by ';'",
+  GLOBAL_VAR(statistics_exclude_db), CMD_LINE(REQUIRED_ARG),
+  IN_FS_CHARSET, DEFAULT("mysql;performance_schema;information_schema"), 
+  NO_MUTEX_GUARD, NOT_IN_BINLOG,0, ON_UPDATE(update_exclude_db));
+  
+static bool update_exclude_sql(sys_var *self, THD *thd, enum_var_type type)
+{
+  return update_exclude_sql_list();
+}
+
+static Sys_var_charptr Sys_statistics_exclude_sql(
+  "statistics_exclude_sql", "exclude sql list, separate by ';'",
+  GLOBAL_VAR(statistics_exclude_sql), CMD_LINE(REQUIRED_ARG),
+  IN_FS_CHARSET, DEFAULT("SET;SHOW"), 
+  NO_MUTEX_GUARD, NOT_IN_BINLOG,0, ON_UPDATE(update_exclude_sql));

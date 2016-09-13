@@ -19,6 +19,7 @@
 
 #include "my_stacktrace.h"              // my_safe_snprintf
 #include "sql_class.h"                  // THD
+#include "sql_statistics.h"
 
 
 THD* Channel_info::create_thd()
@@ -34,6 +35,11 @@ THD* Channel_info::create_thd()
   {
     vio_delete(vio_tmp);
     return NULL;
+  }
+
+  if (thd->m_sql_info == NULL)
+  {
+    thd->m_sql_info = statistics_create_sql_info(thd->charset()->number);
   }
 
   thd->get_protocol_classic()->init_net(vio_tmp);

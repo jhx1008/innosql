@@ -104,7 +104,9 @@ static const char *handler_error_messages[]=
   "Tablespace is not empty",
   "Incorrect file name",
   "Operation is not allowed",
-  "Compute generate value failed"
+  "Compute generate value failed",
+  "user in user_list_string can not to be deleted or updated",
+  "table mysql.user can not to be truncated or dropped"
 };
 
 extern void my_handler_error_register(void);

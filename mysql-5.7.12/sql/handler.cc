@@ -54,6 +54,7 @@
 #include <pfs_transaction_provider.h>
 #include <mysql/psi/mysql_transaction.h>
 #include "opt_hints.h"
+#include "sql_statistics.h"
 
 #include <list>
 #include <cstring>
@@ -832,6 +833,7 @@ int ha_initialize_handlerton(st_plugin_int *plugin)
   }
 
   hton->slot= HA_SLOT_UNDEF;
+  hton->io_stat_ptr = thd_io_increased;
   /* Historical Requirement */
   plugin->data= hton; // shortcut for the future
   if (plugin->plugin->init && plugin->plugin->init(hton))
@@ -3393,6 +3395,11 @@ prev_insert_id(ulonglong nr, struct system_variables *variables)
 #define AUTO_INC_DEFAULT_NB_MAX_BITS 16
 #define AUTO_INC_DEFAULT_NB_MAX ((1 << AUTO_INC_DEFAULT_NB_MAX_BITS) - 1)
 
+bool handler::has_forbid_deleted_user(const char *record)
+{
+  return contain_forbid_deleted_user(record);
+}
+
 int handler::update_auto_increment()
 {
   ulonglong nr, nb_reserved_values;
@@ -4100,6 +4107,12 @@ void handler::print_error(int error, myf errflag)
   case HA_ERR_NOT_ALLOWED_COMMAND:
     textno=ER_NOT_ALLOWED_COMMAND;
     break;
+  case HA_ERR_FORBIDDEN_USER_DELETED:
+	textno = ER_FORBIDDEN_USER_DELETED;
+	break;
+  case HA_ERR_USER_TABLE_DROPPED:
+	textno = ER_USER_TABLE_DROPPED;
+	break;
   default:
     {
       /* The error was "unknown" to this function.
@@ -7851,6 +7864,7 @@ int handler::ha_write_row(uchar *buf)
   if (unlikely((error= binlog_log_row(table, 0, buf, log_func))))
     DBUG_RETURN(error); /* purecov: inspected */
 
+  INCREASE_ROW_BYTE_READS(current_thd, max_row_length(table, buf));
   DEBUG_SYNC_C("ha_write_row_end");
   DBUG_RETURN(0);
 }
@@ -7890,6 +7904,7 @@ int handler::ha_update_row(const uchar *old_data, uchar *new_data)
     DBUG_RETURN(error);
   if (unlikely((error= binlog_log_row(table, old_data, new_data, log_func))))
     DBUG_RETURN(error);
+  INCREASE_ROW_BYTE_READS(current_thd, max_row_length(table, new_data));
   DBUG_RETURN(0);
 }
 
@@ -7923,6 +7938,7 @@ int handler::ha_delete_row(const uchar *buf)
     return error;
   if (unlikely((error= binlog_log_row(table, buf, 0, log_func))))
     return error;
+  INCREASE_ROW_BYTE_READS(current_thd, max_row_length(table, buf));
   return 0;
 }
 

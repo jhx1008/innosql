@@ -108,6 +108,7 @@ this program; if not, write to the Free Software Foundation, Inc.,
 #include "trx0xa.h"
 #include "ut0mem.h"
 #include "row0ext.h"
+#include "sql_iostat.h"
 
 enum_tx_isolation thd_get_trx_isolation(const THD* thd);
 
@@ -3519,6 +3520,7 @@ innobase_init(
         innobase_hton->replace_native_transaction_in_thd =
                 innodb_replace_trx_in_thd;
 	innobase_hton->data = &innodb_api_cb;
+	io_stat_func_ptr = innobase_hton->io_stat_ptr;
 
 	innobase_hton->is_supported_system_table=
 		innobase_is_supported_system_table;
@@ -19999,6 +20001,8 @@ i_s_innodb_sys_foreign,
 i_s_innodb_sys_foreign_cols,
 i_s_innodb_sys_tablespaces,
 i_s_innodb_sys_datafiles,
+i_s_innodb_trx_rollback_segment,
+i_s_innodb_trx_undo,
 i_s_innodb_sys_virtual
 
 mysql_declare_plugin_end;

@@ -553,7 +553,11 @@ bool Sql_cmd_truncate_table::execute(THD *thd)
   bool res= TRUE;
   TABLE_LIST *first_table= thd->lex->select_lex->table_list.first;
   DBUG_ENTER("Sql_cmd_truncate_table::execute");
-
+  if (!is_forbid_users_empty() && (strcmp(first_table->db, "mysql") == 0 && strcmp(first_table->table_name, "user") == 0))
+  {
+    my_error(ER_USER_TABLE_DROPPED, MYF(0));
+	  DBUG_RETURN(res);
+  }
   if (check_one_table_access(thd, DROP_ACL, first_table))
     DBUG_RETURN(res);
 

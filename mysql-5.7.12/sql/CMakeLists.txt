@@ -56,7 +56,7 @@ ADD_CUSTOM_COMMAND(
   DEPENDS gen_lex_token
 )
 
-ADD_DEFINITIONS(-DMYSQL_SERVER -DHAVE_REPLICATION)
+ADD_DEFINITIONS(-DMYSQL_SERVER -DHAVE_REPLICATION -DHAVE_POOL_OF_THREADS)
 IF(SSL_DEFINES)
  ADD_DEFINITIONS(${SSL_DEFINES})
 ENDIF()
@@ -186,6 +186,7 @@ SET(SQL_SHARED_SOURCES
   sql_handler.cc
   sql_help.cc
   sql_insert.cc
+  sql_iostat.cc
   sql_join_buffer.cc
   sql_lex.cc 
   sql_lex_hash.cc
@@ -213,6 +214,7 @@ SET(SQL_SHARED_SOURCES
   sql_show_status.cc
   sql_signal.cc
   sql_state.c
+  sql_statistics.cc
   sql_table.cc
   sql_tablespace.cc
   sql_test.cc
@@ -234,6 +236,7 @@ SET(SQL_SHARED_SOURCES
   table_trigger_dispatcher.cc
   tc_log.cc
   thr_malloc.cc 
+  threadpool_common.cc
   transaction.cc
   transaction_info.cc
   trigger.cc
@@ -245,6 +248,12 @@ SET(SQL_SHARED_SOURCES
   unireg.cc
   xa.cc
 )
+
+IF(WIN32)
+  SET(SQL_SHARED_SOURCES ${SQL_SHARED_SOURCES} threadpool_win.cc)
+ELSE()
+ SET(SQL_SHARED_SOURCES ${SQL_SHARED_SOURCES} threadpool_unix.cc)
+ENDIF()
 
 SET(SQL_EXPORTED_SOURCES ${SQL_SHARED_SOURCES} PARENT_SCOPE)
 

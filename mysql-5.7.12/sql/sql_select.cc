@@ -45,6 +45,7 @@
 #include "item_sum.h"            // Item_sum
 #include "sql_planner.h"         // calculate_condition_filter
 #include "opt_hints.h"           // hint_key_state()
+#include "sql_statistics.h"
 
 #include <algorithm>
 
@@ -181,6 +182,7 @@ bool handle_query(THD *thd, LEX *lex, Query_result *result,
   {
     if (single_query)
     {
+      statistics_save_index(select->join);
       select->join->exec();
       unit->set_executed();
       if (thd->is_error())

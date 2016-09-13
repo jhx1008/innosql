@@ -12,7 +12,7 @@ call mtr.add_suppression("Plugin mysqlx reported: .Error parsing message of type
 # Test case for Bug #21472634 SHOW PROCESSLIST RETURNS DIFERENT RESULTS THAN IS QUERY WITH XPROTOCOL CONNECTN
 -->echo Bug #21472634
 -->stmtsql show processlist;
--->recvresult Id User Host db Command State Info
+-->recvresult Id User Host db Command ACK_WAIT_TIME State Info
 -->sql
 SELECT id,user,command,state FROM information_schema.processlist ORDER BY id;
 -->endsql

@@ -122,7 +122,7 @@ extern bool opt_large_files, server_id_supplied;
 extern bool opt_update_log, opt_bin_log;
 extern my_bool opt_log_slave_updates;
 extern my_bool opt_log_unsafe_statements;
-extern bool opt_general_log, opt_slow_log, opt_general_log_raw;
+extern bool opt_general_log, opt_slow_log, opt_slow_io_log, opt_general_log_raw;
 extern my_bool opt_backup_history_log;
 extern my_bool opt_backup_progress_log;
 extern ulonglong log_output_options;
@@ -143,6 +143,7 @@ extern my_bool opt_slave_compressed_protocol, use_temp_pool;
 extern ulong slave_exec_mode_options;
 extern ulonglong slave_type_conversions_options;
 extern my_bool read_only, opt_readonly;
+extern my_bool opt_innodb_only;
 extern my_bool super_read_only, opt_super_readonly;
 extern my_bool lower_case_file_system;
 extern ulonglong slave_rows_search_algorithms_options;
@@ -172,6 +173,7 @@ extern char *default_tz_name;
 extern Time_zone *default_tz;
 extern char *default_storage_engine;
 extern char *default_tmp_storage_engine;
+extern ulong slow_query_type, long_query_io_ulong;
 extern ulong internal_tmp_disk_storage_engine;
 extern bool opt_endinfo, using_udf_functions;
 extern my_bool locked_in_memory;
@@ -196,6 +198,7 @@ extern ulong opt_log_timestamps;
 extern const char *timestamp_type_names[];
 extern char *opt_general_logname, *opt_slow_logname, *opt_bin_logname,
             *opt_relay_logname;
+extern char *user_list_string;
 extern char *opt_backup_history_logname, *opt_backup_progress_logname,
             *opt_backup_settings_name;
 extern const char *log_output_str;
@@ -229,6 +232,7 @@ extern ulong table_cache_size, table_def_size;
 extern ulong table_cache_size_per_instance, table_cache_instances;
 extern MYSQL_PLUGIN_IMPORT ulong max_connections;
 extern ulong max_digest_length;
+extern ulong super_connections_after_max;
 extern ulong max_connect_errors, connect_timeout;
 extern my_bool opt_slave_allow_batching;
 extern my_bool allow_slave_start;
@@ -238,6 +242,7 @@ extern uint  slave_net_timeout;
 extern ulong opt_mts_slave_parallel_workers;
 extern ulonglong opt_mts_pending_jobs_size_max;
 extern uint max_user_connections;
+extern ulong extra_max_connections;
 extern ulong rpl_stop_slave_timeout;
 extern my_bool log_bin_use_v1_row_events;
 extern ulong what_to_log,flush_time;
@@ -333,6 +338,7 @@ extern ulong net_buffer_length;
 
 extern LEX_CSTRING sql_statement_names[(uint) SQLCOM_END + 1];
 
+extern uint mysqld_extra_port;
 /*
   THR_MALLOC is a key which will be used to set/get MEM_ROOT** for a thread,
   using my_set_thread_local()/my_get_thread_local().
@@ -529,6 +535,7 @@ extern PSI_memory_key key_memory_prune_partitions_exec;
 extern PSI_memory_key key_memory_binlog_recover_exec;
 extern PSI_memory_key key_memory_blob_mem_storage;
 
+extern PSI_memory_key key_memory_thread_pool_connection;
 extern PSI_memory_key key_memory_Sys_var_charptr_value;
 extern PSI_memory_key key_memory_THD_db;
 extern PSI_memory_key key_memory_user_var_entry;
@@ -624,6 +631,7 @@ extern PSI_memory_key key_memory_get_all_tables;
 extern PSI_memory_key key_memory_fill_schema_schemata;
 extern PSI_memory_key key_memory_native_functions;
 extern PSI_memory_key key_memory_JSON;
+extern PSI_memory_key key_memory_top_sql;
 
 C_MODE_END
 

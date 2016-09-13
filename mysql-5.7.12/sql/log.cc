@@ -69,6 +69,8 @@ enum enum_slow_query_log_table_field
   SQLT_FIELD_LOCK_TIME,
   SQLT_FIELD_ROWS_SENT,
   SQLT_FIELD_ROWS_EXAMINED,
+  SQLT_FIELD_LOGICAL_READS,
+  SQLT_FIELD_PHYSICAL_READS,
   SQLT_FIELD_DATABASE,
   SQLT_FIELD_LAST_INSERT_ID,
   SQLT_FIELD_INSERT_ID,
@@ -109,6 +111,16 @@ static const TABLE_FIELD_TYPE slow_query_log_table_fields[SQLT_FIELD_COUNT] =
     { C_STRING_WITH_LEN("rows_examined") },
     { C_STRING_WITH_LEN("int(11)") },
     { NULL, 0 }
+  },
+  {
+	{ C_STRING_WITH_LEN("logical_reads") },
+	{ C_STRING_WITH_LEN("int(11)") },
+	{ NULL, 0 }
+  },
+  {
+	{ C_STRING_WITH_LEN("physical_reads") },
+	{ C_STRING_WITH_LEN("int(11)") },
+	{ NULL, 0 }
   },
   {
     { C_STRING_WITH_LEN("db") },
@@ -1049,6 +1061,12 @@ bool Log_to_csv_event_handler::log_slow(THD *thd, ulonglong current_utime,
     /* rows_examined */
     if (table->field[SQLT_FIELD_ROWS_EXAMINED]->store((longlong) thd->get_examined_row_count(), true))
       goto err;
+	  /* logical_reads */
+	  if (table->field[SQLT_FIELD_LOGICAL_READS]->store((longlong)thd->get_logical_reads(), TRUE))
+	    goto err;
+	  /* physical_reads */
+	  if (table->field[SQLT_FIELD_PHYSICAL_READS]->store((longlong)thd->get_physical_reads(), TRUE))
+	    goto err;
   }
   else
   {
@@ -1056,6 +1074,8 @@ bool Log_to_csv_event_handler::log_slow(THD *thd, ulonglong current_utime,
     table->field[SQLT_FIELD_LOCK_TIME]->set_null();
     table->field[SQLT_FIELD_ROWS_SENT]->set_null();
     table->field[SQLT_FIELD_ROWS_EXAMINED]->set_null();
+	table->field[SQLT_FIELD_LOGICAL_READS]->set_null();
+	table->field[SQLT_FIELD_PHYSICAL_READS]->set_null();
   }
   /* fill database field */
   if (thd->db().str)
@@ -1231,7 +1251,7 @@ void Query_logger::cleanup()
 bool Query_logger::slow_log_write(THD *thd, const char *query,
                                   size_t query_length)
 {
-  DBUG_ASSERT(thd->enable_slow_log && opt_slow_log);
+  DBUG_ASSERT(thd->enable_slow_log && (opt_slow_log || opt_slow_io_log));
 
   if (!(*slow_log_handler_list))
     return false;
@@ -1566,7 +1586,7 @@ bool log_slow_applicable(THD *thd)
     Do not log administrative statements unless the appropriate option is
     set.
   */
-  if (thd->enable_slow_log && opt_slow_log)
+  if (thd->enable_slow_log && (opt_slow_log || opt_slow_io_log))
   {
     bool warn_no_index= ((thd->server_status &
                           (SERVER_QUERY_NO_INDEX_USED |

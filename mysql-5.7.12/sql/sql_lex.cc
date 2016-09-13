@@ -33,7 +33,7 @@
 #include "sql_table.h"                 // primary_key_name
 #include "sql_insert.h"                // Sql_cmd_insert_base
 #include "lex_token.h"
-
+#include "sql_statistics.h"
 
 extern int HINT_PARSER_parse(THD *thd,
                              Hint_scanner *scanner,
@@ -1280,6 +1280,7 @@ bool consume_comment(Lex_input_stream *lip, int remaining_recursions_permitted)
 int MYSQLlex(YYSTYPE *yylval, YYLTYPE *yylloc, THD *thd)
 {
   Lex_input_stream *lip= & thd->m_parser_state->m_lip;
+  SQLInfo *sql_info = thd->m_sql_info;
   int token;
 
   if (thd->is_error())
@@ -1303,6 +1304,7 @@ int MYSQLlex(YYSTYPE *yylval, YYLTYPE *yylloc, THD *thd)
     yylloc->raw.end= lip->get_ptr();
     lip->lookahead_yylval= NULL;
     lip->add_digest_token(token, yylval);
+    statistics_add_token(sql_info, token, yylval);
     return token;
   }
 
@@ -1325,11 +1327,13 @@ int MYSQLlex(YYSTYPE *yylval, YYLTYPE *yylloc, THD *thd)
       yylloc->cpp.end= lip->get_cpp_ptr();
       yylloc->raw.end= lip->get_ptr();
       lip->add_digest_token(WITH_CUBE_SYM, yylval);
+      statistics_add_token(sql_info, token, yylval);
       return WITH_CUBE_SYM;
     case ROLLUP_SYM:
       yylloc->cpp.end= lip->get_cpp_ptr();
       yylloc->raw.end= lip->get_ptr();
       lip->add_digest_token(WITH_ROLLUP_SYM, yylval);
+      statistics_add_token(sql_info, token, yylval);
       return WITH_ROLLUP_SYM;
     default:
       /*
@@ -1341,6 +1345,7 @@ int MYSQLlex(YYSTYPE *yylval, YYLTYPE *yylloc, THD *thd)
       yylloc->cpp.end= lip->get_cpp_ptr();
       yylloc->raw.end= lip->get_ptr();
       lip->add_digest_token(WITH, yylval);
+      statistics_add_token(sql_info, token, yylval);
       return WITH;
     }
     break;
@@ -1350,6 +1355,7 @@ int MYSQLlex(YYSTYPE *yylval, YYLTYPE *yylloc, THD *thd)
   yylloc->raw.end= lip->get_ptr();
   if (!lip->skip_digest)
     lip->add_digest_token(token, yylval);
+  statistics_add_token(sql_info, token, yylval);
   lip->skip_digest= false;
   return token;
 }

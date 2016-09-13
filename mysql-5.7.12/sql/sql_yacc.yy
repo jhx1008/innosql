@@ -1016,6 +1016,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, YYLTYPE **c, ulong *yystacksize);
 %token  STATS_AUTO_RECALC_SYM
 %token  STATS_PERSISTENT_SYM
 %token  STATS_SAMPLE_PAGES_SYM
+%token  STATS_SYM
 %token  STATUS_SYM
 %token  STDDEV_SAMP_SYM               /* SQL-2003-N */
 %token  STD_SYM
@@ -6144,7 +6145,14 @@ storage_engines:
                 thd->lex->create_info.options & HA_LEX_CREATE_TMP_TABLE);
 
             if (plugin)
+            {
               $$= plugin_data<handlerton*>(plugin);
+			        if (opt_innodb_only && $$->db_type != DB_TYPE_INNODB)
+			        {
+			          my_error(ER_NOT_INNODB_STORAGE, MYF(0));
+				        MYSQL_YYABORT;
+              }
+            }
             else
             {
               if (thd->variables.sql_mode & MODE_NO_ENGINE_SUBSTITUTION)
@@ -12110,6 +12118,14 @@ show_param:
             LEX *lex=Lex;
             lex->sql_command= SQLCOM_SHOW_CREATE_USER;
             lex->grant_user=$4;
+          }
+        | SQL_SYM STATS_SYM opt_order_clause opt_limit_clause
+          {
+            Lex->sql_command = SQLCOM_SHOW_SQL_STATS;
+          }
+        | TABLE_SYM STATS_SYM
+          {
+            Lex->sql_command = SQLCOM_SHOW_TABLE_STATS;
           }
         ;
 

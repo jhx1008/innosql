@@ -7645,6 +7645,15 @@ ER_CANNOT_FIND_KEY_IN_KEYRING
 ER_CAPACITY_EXCEEDED_IN_PARSER
   eng "Parser bailed out for this query."
 
+ER_FORBIDDEN_USER_DELETED
+  eng "users witch configured in user_list_string can not to be deleted or updated."
+
+ER_USER_TABLE_DROPPED
+  eng "table mysql.user can not to be truncated or dropped."
+
+ER_NOT_INNODB_STORAGE
+  eng "engine error, any other engines are not permitted except innodb/innobase when innodb_only is true"
+
 #
 #  End of 5.7 error messages.
 #

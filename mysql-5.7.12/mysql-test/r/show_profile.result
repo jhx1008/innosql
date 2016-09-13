@@ -5,9 +5,9 @@ SELECT 1;
 1
 1
 SHOW PROFILES;
-Query_ID	Duration	Query
-1	#	SHOW WARNINGS
-2	#	SELECT 1
+Query_ID	Duration	Logical_reads	Physical_reads	Query
+1	#	0	0	SHOW WARNINGS
+2	#	0	0	SELECT 1
 Warnings:
 Warning	#	'SHOW PROFILES' is deprecated and will be removed in a future release. Please use Performance Schema instead
 SHOW PROFILE FOR QUERY 1;

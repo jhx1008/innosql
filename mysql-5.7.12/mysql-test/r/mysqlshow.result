@@ -110,7 +110,7 @@ Database: information_schema
 | TRIGGERS                              |
 | USER_PRIVILEGES                       |
 | VIEWS                                 |
-| INNODB_LOCKS                          |
+| INNODB_TRX_ROLLBACK_SEGMENT           |
 | INNODB_TRX                            |
 | INNODB_SYS_DATAFILES                  |
 | INNODB_FT_CONFIG                      |
@@ -129,7 +129,7 @@ Database: information_schema
 | INNODB_SYS_FIELDS                     |
 | INNODB_CMP_PER_INDEX_RESET            |
 | INNODB_BUFFER_PAGE                    |
-| INNODB_FT_DEFAULT_STOPWORD            |
+| INNODB_SYS_TABLESTATS                 |
 | INNODB_FT_INDEX_TABLE                 |
 | INNODB_FT_INDEX_CACHE                 |
 | INNODB_SYS_TABLESPACES                |
@@ -139,7 +139,9 @@ Database: information_schema
 | INNODB_BUFFER_POOL_STATS              |
 | INNODB_SYS_COLUMNS                    |
 | INNODB_SYS_FOREIGN                    |
-| INNODB_SYS_TABLESTATS                 |
+| INNODB_LOCKS                          |
+| INNODB_FT_DEFAULT_STOPWORD            |
+| INNODB_TRX_UNDO                       |
 +---------------------------------------+
 Database: INFORMATION_SCHEMA
 +---------------------------------------+
@@ -176,7 +178,7 @@ Database: INFORMATION_SCHEMA
 | TRIGGERS                              |
 | USER_PRIVILEGES                       |
 | VIEWS                                 |
-| INNODB_LOCKS                          |
+| INNODB_TRX_ROLLBACK_SEGMENT           |
 | INNODB_TRX                            |
 | INNODB_SYS_DATAFILES                  |
 | INNODB_FT_CONFIG                      |
@@ -195,7 +197,7 @@ Database: INFORMATION_SCHEMA
 | INNODB_SYS_FIELDS                     |
 | INNODB_CMP_PER_INDEX_RESET            |
 | INNODB_BUFFER_PAGE                    |
-| INNODB_FT_DEFAULT_STOPWORD            |
+| INNODB_SYS_TABLESTATS                 |
 | INNODB_FT_INDEX_TABLE                 |
 | INNODB_FT_INDEX_CACHE                 |
 | INNODB_SYS_TABLESPACES                |
@@ -205,7 +207,9 @@ Database: INFORMATION_SCHEMA
 | INNODB_BUFFER_POOL_STATS              |
 | INNODB_SYS_COLUMNS                    |
 | INNODB_SYS_FOREIGN                    |
-| INNODB_SYS_TABLESTATS                 |
+| INNODB_LOCKS                          |
+| INNODB_FT_DEFAULT_STOPWORD            |
+| INNODB_TRX_UNDO                       |
 +---------------------------------------+
 Wildcard: inf_rmation_schema
 +--------------------+

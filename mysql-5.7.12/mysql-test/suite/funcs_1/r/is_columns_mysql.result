@@ -212,18 +212,34 @@ def	mysql	slave_worker_info	Master_log_name	4	NULL	NO	text	65535	65535	NULL	NULL
 def	mysql	slave_worker_info	Master_log_pos	5	NULL	NO	bigint	NULL	NULL	20	0	NULL	NULL	NULL	bigint(20) unsigned			select,insert,update,references		
 def	mysql	slave_worker_info	Relay_log_name	2	NULL	NO	text	65535	65535	NULL	NULL	NULL	utf8	utf8_bin	text			select,insert,update,references		
 def	mysql	slave_worker_info	Relay_log_pos	3	NULL	NO	bigint	NULL	NULL	20	0	NULL	NULL	NULL	bigint(20) unsigned			select,insert,update,references		
-def	mysql	slow_log	db	7	NULL	NO	varchar	512	1536	NULL	NULL	NULL	utf8	utf8_general_ci	varchar(512)			select,insert,update,references		
-def	mysql	slow_log	insert_id	9	NULL	NO	int	NULL	NULL	10	0	NULL	NULL	NULL	int(11)			select,insert,update,references		
-def	mysql	slow_log	last_insert_id	8	NULL	NO	int	NULL	NULL	10	0	NULL	NULL	NULL	int(11)			select,insert,update,references		
+def	mysql	slow_log	db	9	NULL	NO	varchar	512	1536	NULL	NULL	NULL	utf8	utf8_general_ci	varchar(512)			select,insert,update,references		
+def	mysql	slow_log	insert_id	11	NULL	NO	int	NULL	NULL	10	0	NULL	NULL	NULL	int(11)			select,insert,update,references		
+def	mysql	slow_log	last_insert_id	10	NULL	NO	int	NULL	NULL	10	0	NULL	NULL	NULL	int(11)			select,insert,update,references		
 def	mysql	slow_log	lock_time	4	NULL	NO	time	NULL	NULL	NULL	NULL	6	NULL	NULL	time(6)			select,insert,update,references		
+def	mysql	slow_log	logical_reads	7	NULL	NO	int	NULL	NULL	10	0	NULL	NULL	NULL	int(11)			select,insert,update,references		
+def	mysql	slow_log	physical_reads	8	NULL	NO	int	NULL	NULL	10	0	NULL	NULL	NULL	int(11)			select,insert,update,references		
 def	mysql	slow_log	query_time	3	NULL	NO	time	NULL	NULL	NULL	NULL	6	NULL	NULL	time(6)			select,insert,update,references		
 def	mysql	slow_log	rows_examined	6	NULL	NO	int	NULL	NULL	10	0	NULL	NULL	NULL	int(11)			select,insert,update,references		
 def	mysql	slow_log	rows_sent	5	NULL	NO	int	NULL	NULL	10	0	NULL	NULL	NULL	int(11)			select,insert,update,references		
-def	mysql	slow_log	server_id	10	NULL	NO	int	NULL	NULL	10	0	NULL	NULL	NULL	int(10) unsigned			select,insert,update,references		
-def	mysql	slow_log	sql_text	11	NULL	NO	mediumblob	16777215	16777215	NULL	NULL	NULL	NULL	NULL	mediumblob			select,insert,update,references		
+def	mysql	slow_log	server_id	12	NULL	NO	int	NULL	NULL	10	0	NULL	NULL	NULL	int(10) unsigned			select,insert,update,references		
+def	mysql	slow_log	sql_text	13	NULL	NO	mediumblob	16777215	16777215	NULL	NULL	NULL	NULL	NULL	mediumblob			select,insert,update,references		
 def	mysql	slow_log	start_time	1	CURRENT_TIMESTAMP(6)	NO	timestamp	NULL	NULL	NULL	NULL	6	NULL	NULL	timestamp(6)		on update CURRENT_TIMESTAMP(6)	select,insert,update,references		
-def	mysql	slow_log	thread_id	12	NULL	NO	bigint	NULL	NULL	20	0	NULL	NULL	NULL	bigint(21) unsigned			select,insert,update,references		
+def	mysql	slow_log	thread_id	14	NULL	NO	bigint	NULL	NULL	20	0	NULL	NULL	NULL	bigint(21) unsigned			select,insert,update,references		
 def	mysql	slow_log	user_host	2	NULL	NO	mediumtext	16777215	16777215	NULL	NULL	NULL	utf8	utf8_general_ci	mediumtext			select,insert,update,references		
+def	mysql	sql_stats	BYTE_READS	10	0	NO	bigint	NULL	NULL	19	0	NULL	NULL	NULL	bigint(20)			select,insert,update,references		
+def	mysql	sql_stats	DB_NAME	4		NO	varchar	32	96	NULL	NULL	NULL	utf8	utf8_bin	varchar(32)			select,insert,update,references		
+def	mysql	sql_stats	DISK_TEMP_TABLES	8	0	NO	int	NULL	NULL	10	0	NULL	NULL	NULL	int(11)			select,insert,update,references		
+def	mysql	sql_stats	END_TIME	2	0	NO	bigint	NULL	NULL	20	0	NULL	NULL	NULL	bigint(20) unsigned	PRI		select,insert,update,references		
+def	mysql	sql_stats	EXEC_COUNT	14	0	NO	int	NULL	NULL	10	0	NULL	NULL	NULL	int(11)			select,insert,update,references		
+def	mysql	sql_stats	EXEC_TIMES	13	0	NO	bigint	NULL	NULL	19	0	NULL	NULL	NULL	bigint(20)			select,insert,update,references		
+def	mysql	sql_stats	INDEX_INFO	6		NO	varchar	1024	3072	NULL	NULL	NULL	utf8	utf8_bin	varchar(1024)			select,insert,update,references		
+def	mysql	sql_stats	MAX_EXEC_TIMES	11	0	NO	bigint	NULL	NULL	19	0	NULL	NULL	NULL	bigint(20)			select,insert,update,references		
+def	mysql	sql_stats	MEMORY_TEMP_TABLES	7	0	NO	int	NULL	NULL	10	0	NULL	NULL	NULL	int(11)			select,insert,update,references		
+def	mysql	sql_stats	MIN_EXEC_TIMES	12	0	NO	bigint	NULL	NULL	19	0	NULL	NULL	NULL	bigint(20)			select,insert,update,references		
+def	mysql	sql_stats	ROW_READS	9	0	NO	bigint	NULL	NULL	19	0	NULL	NULL	NULL	bigint(20)			select,insert,update,references		
+def	mysql	sql_stats	SQL_MD5	5		NO	varchar	16	48	NULL	NULL	NULL	utf8	utf8_bin	varchar(16)	PRI		select,insert,update,references		
+def	mysql	sql_stats	SQL_TEXT	3		NO	varchar	10240	30720	NULL	NULL	NULL	utf8	utf8_bin	varchar(10240)			select,insert,update,references		
+def	mysql	sql_stats	START_TIME	1	0	NO	bigint	NULL	NULL	20	0	NULL	NULL	NULL	bigint(20) unsigned	PRI		select,insert,update,references		
 def	mysql	tables_priv	Column_priv	8		NO	set	31	93	NULL	NULL	NULL	utf8	utf8_general_ci	set('Select','Insert','Update','References')			select,insert,update,references		
 def	mysql	tables_priv	Db	2		NO	char	64	192	NULL	NULL	NULL	utf8	utf8_bin	char(64)	PRI		select,insert,update,references		
 def	mysql	tables_priv	Grantor	5		NO	char	77	231	NULL	NULL	NULL	utf8	utf8_bin	char(77)	MUL		select,insert,update,references		
@@ -232,6 +248,14 @@ def	mysql	tables_priv	Table_name	4		NO	char	64	192	NULL	NULL	NULL	utf8	utf8_bin	
 def	mysql	tables_priv	Table_priv	7		NO	set	98	294	NULL	NULL	NULL	utf8	utf8_general_ci	set('Select','Insert','Update','Delete','Create','Drop','Grant','References','Index','Alter','Create View','Show view','Trigger')			select,insert,update,references		
 def	mysql	tables_priv	Timestamp	6	CURRENT_TIMESTAMP	NO	timestamp	NULL	NULL	NULL	NULL	0	NULL	NULL	timestamp		on update CURRENT_TIMESTAMP	select,insert,update,references		
 def	mysql	tables_priv	User	3		NO	char	32	96	NULL	NULL	NULL	utf8	utf8_bin	char(32)	PRI		select,insert,update,references		
+def	mysql	table_stats	DBNAME	3		NO	varchar	64	192	NULL	NULL	NULL	utf8	utf8_bin	varchar(64)	PRI		select,insert,update,references		
+def	mysql	table_stats	DELETE_COUNT	8	0	NO	int	NULL	NULL	10	0	NULL	NULL	NULL	int(11)			select,insert,update,references		
+def	mysql	table_stats	END_TIME	2	0	NO	bigint	NULL	NULL	20	0	NULL	NULL	NULL	bigint(20) unsigned	PRI		select,insert,update,references		
+def	mysql	table_stats	INSERT_COUNT	6	0	NO	bigint	NULL	NULL	19	0	NULL	NULL	NULL	bigint(20)			select,insert,update,references		
+def	mysql	table_stats	SELECT_COUNT	5	0	NO	bigint	NULL	NULL	19	0	NULL	NULL	NULL	bigint(20)			select,insert,update,references		
+def	mysql	table_stats	START_TIME	1	0	NO	bigint	NULL	NULL	20	0	NULL	NULL	NULL	bigint(20) unsigned	PRI		select,insert,update,references		
+def	mysql	table_stats	TABLE_NAME	4		NO	varchar	64	192	NULL	NULL	NULL	utf8	utf8_bin	varchar(64)	PRI		select,insert,update,references		
+def	mysql	table_stats	UPDATE_COUNT	7	0	NO	bigint	NULL	NULL	19	0	NULL	NULL	NULL	bigint(20)			select,insert,update,references		
 def	mysql	time_zone	Time_zone_id	1	NULL	NO	int	NULL	NULL	10	0	NULL	NULL	NULL	int(10) unsigned	PRI	auto_increment	select,insert,update,references		
 def	mysql	time_zone	Use_leap_seconds	2	N	NO	enum	1	3	NULL	NULL	NULL	utf8	utf8_general_ci	enum('Y','N')			select,insert,update,references		
 def	mysql	time_zone_leap_second	Correction	2	NULL	NO	int	NULL	NULL	10	0	NULL	NULL	NULL	int(11)			select,insert,update,references		
@@ -576,12 +600,28 @@ NULL	mysql	slow_log	query_time	time	NULL	NULL	NULL	NULL	time(6)
 NULL	mysql	slow_log	lock_time	time	NULL	NULL	NULL	NULL	time(6)
 NULL	mysql	slow_log	rows_sent	int	NULL	NULL	NULL	NULL	int(11)
 NULL	mysql	slow_log	rows_examined	int	NULL	NULL	NULL	NULL	int(11)
+NULL	mysql	slow_log	logical_reads	int	NULL	NULL	NULL	NULL	int(11)
+NULL	mysql	slow_log	physical_reads	int	NULL	NULL	NULL	NULL	int(11)
 3.0000	mysql	slow_log	db	varchar	512	1536	utf8	utf8_general_ci	varchar(512)
 NULL	mysql	slow_log	last_insert_id	int	NULL	NULL	NULL	NULL	int(11)
 NULL	mysql	slow_log	insert_id	int	NULL	NULL	NULL	NULL	int(11)
 NULL	mysql	slow_log	server_id	int	NULL	NULL	NULL	NULL	int(10) unsigned
 1.0000	mysql	slow_log	sql_text	mediumblob	16777215	16777215	NULL	NULL	mediumblob
 NULL	mysql	slow_log	thread_id	bigint	NULL	NULL	NULL	NULL	bigint(21) unsigned
+NULL	mysql	sql_stats	START_TIME	bigint	NULL	NULL	NULL	NULL	bigint(20) unsigned
+NULL	mysql	sql_stats	END_TIME	bigint	NULL	NULL	NULL	NULL	bigint(20) unsigned
+3.0000	mysql	sql_stats	SQL_TEXT	varchar	10240	30720	utf8	utf8_bin	varchar(10240)
+3.0000	mysql	sql_stats	DB_NAME	varchar	32	96	utf8	utf8_bin	varchar(32)
+3.0000	mysql	sql_stats	SQL_MD5	varchar	16	48	utf8	utf8_bin	varchar(16)
+3.0000	mysql	sql_stats	INDEX_INFO	varchar	1024	3072	utf8	utf8_bin	varchar(1024)
+NULL	mysql	sql_stats	MEMORY_TEMP_TABLES	int	NULL	NULL	NULL	NULL	int(11)
+NULL	mysql	sql_stats	DISK_TEMP_TABLES	int	NULL	NULL	NULL	NULL	int(11)
+NULL	mysql	sql_stats	ROW_READS	bigint	NULL	NULL	NULL	NULL	bigint(20)
+NULL	mysql	sql_stats	BYTE_READS	bigint	NULL	NULL	NULL	NULL	bigint(20)
+NULL	mysql	sql_stats	MAX_EXEC_TIMES	bigint	NULL	NULL	NULL	NULL	bigint(20)
+NULL	mysql	sql_stats	MIN_EXEC_TIMES	bigint	NULL	NULL	NULL	NULL	bigint(20)
+NULL	mysql	sql_stats	EXEC_TIMES	bigint	NULL	NULL	NULL	NULL	bigint(20)
+NULL	mysql	sql_stats	EXEC_COUNT	int	NULL	NULL	NULL	NULL	int(11)
 3.0000	mysql	tables_priv	Host	char	60	180	utf8	utf8_bin	char(60)
 3.0000	mysql	tables_priv	Db	char	64	192	utf8	utf8_bin	char(64)
 3.0000	mysql	tables_priv	User	char	32	96	utf8	utf8_bin	char(32)
@@ -590,6 +630,14 @@ NULL	mysql	slow_log	thread_id	bigint	NULL	NULL	NULL	NULL	bigint(21) unsigned
 NULL	mysql	tables_priv	Timestamp	timestamp	NULL	NULL	NULL	NULL	timestamp
 3.0000	mysql	tables_priv	Table_priv	set	98	294	utf8	utf8_general_ci	set('Select','Insert','Update','Delete','Create','Drop','Grant','References','Index','Alter','Create View','Show view','Trigger')
 3.0000	mysql	tables_priv	Column_priv	set	31	93	utf8	utf8_general_ci	set('Select','Insert','Update','References')
+NULL	mysql	table_stats	START_TIME	bigint	NULL	NULL	NULL	NULL	bigint(20) unsigned
+NULL	mysql	table_stats	END_TIME	bigint	NULL	NULL	NULL	NULL	bigint(20) unsigned
+3.0000	mysql	table_stats	DBNAME	varchar	64	192	utf8	utf8_bin	varchar(64)
+3.0000	mysql	table_stats	TABLE_NAME	varchar	64	192	utf8	utf8_bin	varchar(64)
+NULL	mysql	table_stats	SELECT_COUNT	bigint	NULL	NULL	NULL	NULL	bigint(20)
+NULL	mysql	table_stats	INSERT_COUNT	bigint	NULL	NULL	NULL	NULL	bigint(20)
+NULL	mysql	table_stats	UPDATE_COUNT	bigint	NULL	NULL	NULL	NULL	bigint(20)
+NULL	mysql	table_stats	DELETE_COUNT	int	NULL	NULL	NULL	NULL	int(11)
 NULL	mysql	time_zone	Time_zone_id	int	NULL	NULL	NULL	NULL	int(10) unsigned
 3.0000	mysql	time_zone	Use_leap_seconds	enum	1	3	utf8	utf8_general_ci	enum('Y','N')
 NULL	mysql	time_zone_leap_second	Transition_time	bigint	NULL	NULL	NULL	NULL	bigint(20)

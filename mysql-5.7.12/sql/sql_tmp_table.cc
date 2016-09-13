@@ -31,6 +31,7 @@
 #include "sql_executor.h"         // SJ_TMP_TABLE
 #include "sql_plugin.h"           // plugin_unlock
 
+#include "sql_statistics.h"
 #include <algorithm>
 
 using std::max;
@@ -1085,7 +1086,7 @@ update_hidden:
     table->file= get_new_handler(share, &table->mem_root,
                                  share->db_type());
   }
-
+  INCREASE_MEM_TEMP_TABLE_CREATED(thd);
   /*
     Different temp table engine supports different max_key_length
     and max_key_part_lengthi. If HEAP engine is selected, it can be

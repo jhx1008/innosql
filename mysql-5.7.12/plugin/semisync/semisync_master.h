@@ -865,6 +865,8 @@ public:
 };
 
 /* System and status variables for the master component */
+extern char rpl_semi_sync_master_keepsyncrepl;
+extern char rpl_semi_sync_master_trysyncrepl;
 extern char rpl_semi_sync_master_enabled;
 extern char rpl_semi_sync_master_status;
 extern unsigned long rpl_semi_sync_master_clients;

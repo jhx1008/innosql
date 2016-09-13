@@ -33,6 +33,7 @@
 #include "sql_plugin_ref.h"    // plugin_ref
 
 #include "mysql/psi/psi.h"
+#include "sql_iostat.h"
 
 #include <algorithm>
 #include <string>
@@ -980,6 +981,7 @@ struct handlerton
   */
   bool (*rotate_encryption_master_key)(void);
 
+  _io_stat_func_ptr io_stat_ptr;
    uint32 license; /* Flag for Engine License */
    void *data; /* Location for engines to keep personal structures */
 };
@@ -2423,6 +2425,7 @@ public:
 
   void adjust_next_insert_id_after_explicit_value(ulonglong nr);
   int update_auto_increment();
+  bool has_forbid_deleted_user(const char *record);
   virtual void print_error(int error, myf errflag);
   virtual bool get_error_message(int error, String *buf);
   uint get_dup_key(int error);

@@ -180,7 +180,7 @@ drop table bug16905;
 truncate table mysql.slow_log;
 set session long_query_time=1;
 select sleep(2);
---replace_column 1 TIMESTAMP 2 USER_HOST 3 QUERY_TIME 11 QUERY 12 THREAD_ID
+--replace_column 1 TIMESTAMP 2 USER_HOST 3 QUERY_TIME 7 LOGICAL_READS 8 PHYSICAL_READS 13 QUERY 14 THREAD_ID
 select * from mysql.slow_log;
 set @@session.long_query_time = @saved_long_query_time;
 
@@ -308,6 +308,8 @@ CREATE TABLE `slow_log` (
   `lock_time` time(6) NOT NULL,
   `rows_sent` int(11) NOT NULL,
   `rows_examined` int(11) NOT NULL,
+  `logical_reads` int(11) NOT NULL,
+  `physical_reads` int(11) NOT NULL,
   `db` varchar(512) NOT NULL,
   `last_insert_id` int(11) NOT NULL,
   `insert_id` int(11) NOT NULL,
@@ -654,6 +656,8 @@ CREATE TABLE `db_17876.slow_log_data` (
   `lock_time` time ,
   `rows_sent` int(11) ,
   `rows_examined` int(11) ,
+  `logical_reads` int(11) ,
+  `physical_reads` int(11) ,
   `db` varchar(512) default NULL,
   `last_insert_id` int(11) default NULL,
   `insert_id` int(11) default NULL,
@@ -677,7 +681,7 @@ CREATE procedure `db_17876.archiveSlowLog`()
 BEGIN
   DECLARE start_time, query_time, lock_time CHAR(20);
   DECLARE user_host MEDIUMTEXT;
-  DECLARE rows_set, rows_examined, last_insert_id, insert_id, server_id INT;
+  DECLARE rows_set, rows_examined, logical_reads, physical_reads, last_insert_id, insert_id, server_id INT;
   DECLARE thread_id BIGINT UNSIGNED;
   DECLARE dbname MEDIUMTEXT;
   DECLARE sql_text BLOB;
@@ -695,7 +699,7 @@ BEGIN
 
         FETCH cur1 INTO
            start_time, user_host, query_time, lock_time,
-           rows_set, rows_examined, dbname, last_insert_id,
+           rows_set, rows_examined, logical_reads, physical_reads, dbname, last_insert_id,
            insert_id, server_id, sql_text, thread_id;
       END;
 
@@ -703,7 +707,7 @@ BEGIN
         BEGIN
           INSERT INTO
             `db_17876.slow_log_data`
-            VALUES(start_time, user_host, query_time, lock_time, rows_set, rows_examined,
+            VALUES(start_time, user_host, query_time, lock_time, rows_set, rows_examined, logical_reads, physical_reads,
                    dbname, last_insert_id,  insert_id, server_id, sql_text, thread_id);
         END;
       END IF;

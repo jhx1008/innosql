@@ -127,6 +127,13 @@ def	mysql	PRIMARY	def	mysql	slave_master_info	Channel_name
 def	mysql	PRIMARY	def	mysql	slave_relay_log_info	Channel_name
 def	mysql	PRIMARY	def	mysql	slave_worker_info	Channel_name
 def	mysql	PRIMARY	def	mysql	slave_worker_info	Id
+def	mysql	PRIMARY	def	mysql	sql_stats	START_TIME
+def	mysql	PRIMARY	def	mysql	sql_stats	END_TIME
+def	mysql	PRIMARY	def	mysql	sql_stats	SQL_MD5
+def	mysql	PRIMARY	def	mysql	table_stats	START_TIME
+def	mysql	PRIMARY	def	mysql	table_stats	END_TIME
+def	mysql	PRIMARY	def	mysql	table_stats	DBNAME
+def	mysql	PRIMARY	def	mysql	table_stats	TABLE_NAME
 def	mysql	PRIMARY	def	mysql	tables_priv	Host
 def	mysql	PRIMARY	def	mysql	tables_priv	Db
 def	mysql	PRIMARY	def	mysql	tables_priv	User

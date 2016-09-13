@@ -2316,6 +2316,213 @@ log_event_print_value(IO_CACHE *file, const uchar *ptr,
   return 0;
 }
 
+/**
+  Print a packed value of the given SQL type into IO cache
+  
+  @param[in] file              IO cache
+  @param[in] ptr               Pointer to string
+  @param[in] type              Column type
+  @param[in] meta              Column meta information
+  @param[out] typestr          SQL type string buffer (for verbose output)
+  @param[out] typestr_length   Size of typestr
+  
+  @retval   - number of bytes scanned from ptr.
+*/
+static size_t
+log_event_print_value(const uchar *ptr,
+                      uint type, uint meta,
+                      char *typestr, size_t typestr_length)
+{
+  if (!ptr)
+  {
+	  DBUG_PRINT("log_event_print_value", ("ptr is null"));
+    return 1;
+  }
+  
+  uint32 length= 0;
+
+  if (type == MYSQL_TYPE_STRING)
+  {
+    if (meta >= 256)
+    {
+      uint byte0= meta >> 8;
+      uint byte1= meta & 0xFF;
+      
+      if ((byte0 & 0x30) != 0x30)
+      {
+        /* a long CHAR() field: see #37426 */
+        length= byte1 | (((byte0 & 0x30) ^ 0x30) << 4);
+        type= byte0 | 0x30;
+      }
+      else
+        length = meta & 0xFF;
+    }
+    else
+      length= meta;
+  }
+
+  switch (type) {
+  case MYSQL_TYPE_LONG:
+    {
+      return 4;
+    }
+
+  case MYSQL_TYPE_TINY:
+    {
+      return 1;
+    }
+
+  case MYSQL_TYPE_SHORT:
+    {
+      return 2;
+    }
+  
+  case MYSQL_TYPE_INT24:
+    {
+      return 3;
+    }
+
+  case MYSQL_TYPE_LONGLONG:
+    {
+      return 8;
+    }
+
+  case MYSQL_TYPE_NEWDECIMAL:
+    {
+      uint precision= meta >> 8;
+      uint decimals= meta & 0xFF;
+      uint bin_size= my_decimal_get_binary_size(precision, decimals);
+      return bin_size;
+    }
+
+  case MYSQL_TYPE_FLOAT:
+    {
+      return 4;
+    }
+
+  case MYSQL_TYPE_DOUBLE:
+    {
+      return 8;
+    }
+  
+  case MYSQL_TYPE_BIT:
+    {
+      /* Meta-data: bit_len, bytes_in_rec, 2 bytes */
+      uint nbits= ((meta >> 8) * 8) + (meta & 0xFF);
+      length= (nbits + 7) / 8;
+      return length;
+    }
+
+  case MYSQL_TYPE_TIMESTAMP:
+    {
+      return 4;
+    }
+
+  case MYSQL_TYPE_TIMESTAMP2:
+    {
+      return my_timestamp_binary_length(meta);
+    }
+
+  case MYSQL_TYPE_DATETIME:
+    {
+      return 8;
+    }
+
+  case MYSQL_TYPE_DATETIME2:
+    {
+      return my_datetime_binary_length(meta);
+    }
+
+  case MYSQL_TYPE_TIME:
+    {
+      return 3;
+    }
+
+  case MYSQL_TYPE_TIME2:
+    {
+      return my_time_binary_length(meta);
+    }
+
+  case MYSQL_TYPE_NEWDATE:
+    {
+      return 3;
+    }
+
+  case MYSQL_TYPE_YEAR:
+    {
+      return 1;
+    }
+  
+  case MYSQL_TYPE_ENUM:
+    switch (meta & 0xFF) {
+    case 1:
+      return 1;
+    case 2:
+      {
+        return 2;
+      }
+    default: 
+      return 0;
+    }
+    break;
+    
+  case MYSQL_TYPE_SET:
+    return meta & 0xFF;
+  
+  case MYSQL_TYPE_BLOB:
+    switch (meta) {
+    case 1:
+      length= *ptr;
+      return length + 1;
+    case 2:
+      length= uint2korr(ptr);
+      return length + 2;
+    case 3:
+      length= uint3korr(ptr);
+      return length + 3;
+    case 4:
+      length= uint4korr(ptr);
+      return length + 4;
+    default:
+      return 0;
+    }
+
+  case MYSQL_TYPE_VARCHAR:
+  case MYSQL_TYPE_VAR_STRING:
+    length= meta;
+	if (length < 256)
+	{
+	  length= *ptr;
+	  return length + 1;
+	}
+	else
+	{
+	  length= uint2korr(ptr);
+	  return length + 2;
+	}
+
+
+  case MYSQL_TYPE_STRING:
+	  if (length < 256)
+	  {
+		length= *ptr;
+		return length + 1;
+	  }
+	  else
+	  {
+		length= uint2korr(ptr);
+		return length + 2;
+	  }
+
+
+  case MYSQL_TYPE_JSON:
+    length= uint2korr(ptr);
+    return length + meta;
+
+  }
+  *typestr= 0;
+  return 0;
+}
 
 /**
   Print a packed row into IO cache
@@ -2335,7 +2542,8 @@ size_t
 Rows_log_event::print_verbose_one_row(IO_CACHE *file, table_def *td,
                                       PRINT_EVENT_INFO *print_event_info,
                                       MY_BITMAP *cols_bitmap,
-                                      const uchar *value, const uchar *prefix)
+                                      const uchar *value, const uchar *prefix,
+                                      const my_bool only_parse)
 {
   const uchar *value0= value;
   const uchar *null_bits= value;
@@ -2348,7 +2556,8 @@ Rows_log_event::print_verbose_one_row(IO_CACHE *file, table_def *td,
    */
   value+= (bitmap_bits_set(cols_bitmap) + 7) / 8;
   
-  my_b_printf(file, "%s", prefix);
+  if (!only_parse) // Flashback
+  	my_b_printf(file, "%s", prefix);
   
   for (size_t i= 0; i < td->size(); i ++)
   {
@@ -2357,45 +2566,119 @@ Rows_log_event::print_verbose_one_row(IO_CACHE *file, table_def *td,
 
     if (bitmap_is_set(cols_bitmap, i) == 0)
       continue;
-    
-    my_b_printf(file, "###   @%d=", static_cast<int>(i + 1));
+
+	if (!only_parse) // Flashback
+    	my_b_printf(file, "###   @%d=", static_cast<int>(i + 1));
     if (!is_null)
     {
       size_t fsize= td->calc_field_size((uint)i, (uchar*) value);
       if (value + fsize > m_rows_end)
       {
-        my_b_printf(file, "***Corrupted replication event was detected."
+      	if (!only_parse) // Flashback
+        	my_b_printf(file, "***Corrupted replication event was detected."
                     " Not printing the value***\n");
         value+= fsize;
         return 0;
       }
     }
-    size_t size= log_event_print_value(file,is_null? NULL: value,
-                                         td->type(i), td->field_metadata(i),
-                                         typestr, sizeof(typestr));
-    if (!size)
-      return 0;
+
+	size_t size = 0;
+	if (!only_parse) // Flashback 
+	  size = log_event_print_value(file, is_null? NULL: value, 
+			  td->type(i), td->field_metadata(i),					
+			  typestr, sizeof(typestr));
+	 else
+	  size = log_event_print_value(is_null? NULL: value,
+			   td->type(i), td->field_metadata(i),
+			   typestr, sizeof(typestr));
+	/* End */
+	if (!size)
+	  return 0;
 
     if(!is_null)
       value+= size;
 
     if (print_event_info->verbose > 1)
     {
-      my_b_printf(file, " /* ");
+    	if (!only_parse) // Flashback
+		{
+	      my_b_printf(file, " /* ");
 
-      my_b_printf(file, "%s ", typestr);
-      
-      my_b_printf(file, "meta=%d nullable=%d is_null=%d ",
-                  td->field_metadata(i),
-                  td->maybe_null(i), is_null);
-      my_b_printf(file, "*/");
+	      my_b_printf(file, "%s ", typestr);
+	      
+	      my_b_printf(file, "meta=%d nullable=%d is_null=%d ",
+	                  td->field_metadata(i),
+	                  td->maybe_null(i), is_null);
+	      my_b_printf(file, "*/");
+    	}
     }
-    
-    my_b_printf(file, "\n");
+	
+    if (!only_parse) // Flashback
+    	my_b_printf(file, "\n");
     
     null_bit_index++;
   }
   return value - value0;
+}
+
+void Rows_log_event::exchange_update_rows(PRINT_EVENT_INFO *print_event_info,
+                                          uchar *rows_buff)
+{
+  Table_map_log_event *map;
+  table_def *td;
+  uchar *data_buff= rows_buff + m_rows_buf_offset;
+
+  if ((map= print_event_info->m_table_map.get_table(m_table_id))) {
+  	if (!(td= map->create_table_def()))
+	{
+	  	fprintf(stderr, "exchange_update_rows td=null\n");
+	    return;
+	}
+  } else {
+	 fprintf(stderr, "exchange_update_rows map = null\n");
+    return;
+  }
+
+  for (uchar *value= m_rows_buf; value < m_rows_end; )
+  {
+  	
+    uchar *start_pos= value;
+    size_t length1;
+    if (!(length1= print_verbose_one_row(NULL, td, print_event_info,
+                                        &m_cols, value,
+                                         (const uchar*) "", TRUE))) {
+	  fprintf(stderr, "length1= print_verbose_one_row null\n");
+	  return;                                         
+    }
+
+    value+= length1;
+
+    size_t length2;
+    if (!(length2= print_verbose_one_row(NULL, td, print_event_info,
+                                        &m_cols_ai, value,
+                                        (const uchar*) "", TRUE))) {
+	  fprintf(stderr, "length2= print_verbose_one_row null\n");
+	  return;										  
+	}
+
+    value+= length2;
+
+    /* Swap SET and WHERE part */
+    uchar *swap_buff1= (uchar *) my_malloc(PSI_NOT_INSTRUMENTED, length1, MYF(0));
+    uchar *swap_buff2= (uchar *) my_malloc(PSI_NOT_INSTRUMENTED, length2, MYF(0));
+
+    memcpy(swap_buff1, start_pos, length1); // SET part
+    memcpy(swap_buff2, start_pos + length1, length2); // WHERE part
+
+    memcpy(start_pos, swap_buff2, length2);
+    memcpy(start_pos + length2, swap_buff1, length1);
+	
+	my_free((void*)swap_buff1);
+	my_free((void*)swap_buff2);	
+  }
+
+  /* Move to rows_buff */
+  memcpy(data_buff, m_rows_buf, m_rows_end - m_rows_buf);
 }
 
 
@@ -2482,7 +2765,8 @@ void Rows_log_event::print_verbose(IO_CACHE *file,
 
   for (const uchar *value= m_rows_buf; value < m_rows_end; )
   {
-    size_t length;
+    size_t length1;
+    size_t length2 = 0;	
 #ifdef MYSQL_SERVER
     quoted_db_len= my_strmov_quoted_identifier(this->thd, (char *) quoted_db,
                                         map->get_db_name(), 0);
@@ -2501,21 +2785,22 @@ void Rows_log_event::print_verbose(IO_CACHE *file,
                       sql_command,
                       quoted_db, quoted_table);
     /* Print the first image */
-    if (!(length= print_verbose_one_row(file, td, print_event_info,
+    if (!(length1= print_verbose_one_row(file, td, print_event_info,
                                   &m_cols, value,
                                   (const uchar*) sql_clause1)))
       goto end;
-    value+= length;
+    value+= length1;
 
     /* Print the second image (for UPDATE only) */
     if (sql_clause2)
     {
-      if (!(length= print_verbose_one_row(file, td, print_event_info,
+      if (!(length2= print_verbose_one_row(file, td, print_event_info,
                                       &m_cols_ai, value,
                                       (const uchar*) sql_clause2)))
         goto end;
-      value+= length;
+      value+= length2;
     }
+
   }
 
 end:
@@ -2533,7 +2818,7 @@ void Log_event::print_base64(IO_CACHE* file,
                              PRINT_EVENT_INFO* print_event_info,
                              bool more)
 {
-  const uchar *ptr= (const uchar *)temp_buf;
+  uchar *ptr= (uchar *)temp_buf; //Flashback
   uint32 size= uint4korr(ptr + EVENT_LEN_OFFSET);
   DBUG_ENTER("Log_event::print_base64");
 
@@ -2544,6 +2829,47 @@ void Log_event::print_base64(IO_CACHE* file,
     fprintf(stderr, "\nError: Out of memory. "
             "Could not print correct binlog event.\n");
     DBUG_VOID_RETURN;
+  }
+
+  const Format_description_event fd_evt=
+     Format_description_event(glob_description_event->binlog_version,
+                                   server_version);
+
+  if (is_flashback) //Flashback
+  {
+    uint32 fb_size = size;
+
+	if (common_footer->checksum_alg != binary_log::BINLOG_CHECKSUM_ALG_UNDEF &&
+	  common_footer->checksum_alg != binary_log::BINLOG_CHECKSUM_ALG_OFF) {
+		fb_size-= BINLOG_CHECKSUM_LEN; // checksum is displayed through the header
+	}
+
+    switch (ptr[EVENT_TYPE_OFFSET]) {
+	  //add TABLE_MAP_EVENT, as UPDATE_ROWS_EVENT need to get_table from map
+	  case binary_log::TABLE_MAP_EVENT:
+	  {
+		Table_map_log_event *map; 
+		map= new Table_map_log_event((const char*) ptr, fb_size, 
+									 &fd_evt);
+		print_event_info->m_table_map.set_table(map->get_table_id(), map);
+		break;
+	  }
+
+      case binary_log::WRITE_ROWS_EVENT:
+        ptr[EVENT_TYPE_OFFSET]= binary_log::DELETE_ROWS_EVENT;
+        break;
+      case binary_log::DELETE_ROWS_EVENT:
+        ptr[EVENT_TYPE_OFFSET]= binary_log::WRITE_ROWS_EVENT;
+        break;
+      case binary_log::UPDATE_ROWS_EVENT:
+        Rows_log_event *ev= NULL;
+
+	 	ev= new Update_rows_log_event((const char*) ptr, fb_size,
+                                       &fd_evt);
+        ev->exchange_update_rows(print_event_info, ptr);
+		delete ev;
+        break;
+    }
   }
 
   if (base64_encode(ptr, (size_t) size, tmp_str))
@@ -2568,21 +2894,20 @@ void Log_event::print_base64(IO_CACHE* file,
     Log_event_type et= (Log_event_type) ptr[EVENT_TYPE_OFFSET];
 
     if (common_footer->checksum_alg != binary_log::BINLOG_CHECKSUM_ALG_UNDEF &&
-        common_footer->checksum_alg != binary_log::BINLOG_CHECKSUM_ALG_OFF)
+        common_footer->checksum_alg != binary_log::BINLOG_CHECKSUM_ALG_OFF) 
       size-= BINLOG_CHECKSUM_LEN; // checksum is displayed through the header
 
-    const Format_description_event fd_evt=
-          Format_description_event(glob_description_event->binlog_version,
-                                   server_version);
     switch(et)
     {
     case binary_log::TABLE_MAP_EVENT:
     {
-      Table_map_log_event *map;
-      map= new Table_map_log_event((const char*) ptr, size,
-                                   &fd_evt);
-      print_event_info->m_table_map.set_table(map->get_table_id(), map);
-      break;
+	  if (!is_flashback) 
+	  {
+		  Table_map_log_event *map;
+		  map= new Table_map_log_event((const char*) ptr, size,&fd_evt);
+		  print_event_info->m_table_map.set_table(map->get_table_id(), map);
+	  }
+	  break;
     }
     case binary_log::WRITE_ROWS_EVENT:
     case binary_log::WRITE_ROWS_EVENT_V1:
@@ -4081,10 +4406,14 @@ void Query_log_event::print_query_header(IO_CACHE* file,
 
   if (!print_event_info->short_form)
   {
-    print_header(file, print_event_info, FALSE);
-    my_b_printf(file, "\t%s\tthread_id=%lu\texec_time=%lu\terror_code=%d\n",
-                get_type_str(), (ulong) thread_id, (ulong) exec_time,
-                error_code);
+  	if (!is_only_print_info) {
+		if (!is_flashback) {
+		    print_header(file, print_event_info, FALSE);
+		    my_b_printf(file, "\t%s\tthread_id=%lu\texec_time=%lu\terror_code=%d\n",
+		                get_type_str(), (ulong) thread_id, (ulong) exec_time,
+		                error_code);
+		}
+  	}
   }
 
   if ((common_header->flags & LOG_EVENT_SUPPRESS_USE_F))
@@ -4103,8 +4432,15 @@ void Query_log_event::print_query_header(IO_CACHE* file,
     different_db= memcmp(print_event_info->db, db, db_len + 1);
     if (different_db)
       memcpy(print_event_info->db, db, db_len + 1);
-    if (db[0] && different_db) 
-      my_b_printf(file, "use %s%s\n", quoted_id, print_event_info->delimiter);
+    if (db[0] && different_db) {
+		if (!is_only_print_info) {
+			if (!is_flashback)
+      			my_b_printf(file, "use %s%s\n", quoted_id, print_event_info->delimiter);
+		} else {
+			if (!is_flashback)
+	  			printf(" is DDL\n");
+		}
+    }
   }
 
   end= int10_to_str((long)common_header->when.tv_sec,
@@ -4114,13 +4450,20 @@ void Query_log_event::print_query_header(IO_CACHE* file,
   end= my_stpcpy(end, print_event_info->delimiter);
   *end++='\n';
   DBUG_ASSERT(end < buff + sizeof(buff));
-  my_b_write(file, (uchar*) buff, (uint) (end-buff));
+  if (!is_only_print_info) {
+  	if (!is_flashback)
+    	my_b_write(file, (uchar*) buff, (uint) (end-buff));
+  } else {
+    return;
+  }
+
   if ((!print_event_info->thread_id_printed ||
        ((common_header->flags & LOG_EVENT_THREAD_SPECIFIC_F) &&
         thread_id != print_event_info->thread_id)))
   {
     // If --short-form, print deterministic value instead of pseudo_thread_id.
-    my_b_printf(file,"SET @@session.pseudo_thread_id=%lu%s\n",
+    if (!is_flashback)
+    	my_b_printf(file,"SET @@session.pseudo_thread_id=%lu%s\n",
                 short_form ? 999999999 : (ulong)thread_id,
                 print_event_info->delimiter);
     print_event_info->thread_id= thread_id;
@@ -4143,22 +4486,24 @@ void Query_log_event::print_query_header(IO_CACHE* file,
       print_event_info->flags2_inited= 1;
       tmp= ~((uint32)0); /* all bits have changed */
     }
-
-    if (unlikely(tmp)) /* some bits have changed */
-    {
-      bool need_comma= 0;
-      my_b_printf(file, "SET ");
-      print_set_option(file, tmp, OPTION_NO_FOREIGN_KEY_CHECKS, ~flags2,
-                       "@@session.foreign_key_checks", &need_comma);
-      print_set_option(file, tmp, OPTION_AUTO_IS_NULL, flags2,
-                       "@@session.sql_auto_is_null", &need_comma);
-      print_set_option(file, tmp, OPTION_RELAXED_UNIQUE_CHECKS, ~flags2,
-                       "@@session.unique_checks", &need_comma);
-      print_set_option(file, tmp, OPTION_NOT_AUTOCOMMIT, ~flags2,
-                       "@@session.autocommit", &need_comma);
-      my_b_printf(file,"%s\n", print_event_info->delimiter);
-      print_event_info->flags2= flags2;
-    }
+	
+	if (!is_flashback) {
+	    if (unlikely(tmp)) /* some bits have changed */
+	    {
+	      bool need_comma= 0;
+	      my_b_printf(file, "SET ");
+	      print_set_option(file, tmp, OPTION_NO_FOREIGN_KEY_CHECKS, ~flags2,
+	                       "@@session.foreign_key_checks", &need_comma);
+	      print_set_option(file, tmp, OPTION_AUTO_IS_NULL, flags2,
+	                       "@@session.sql_auto_is_null", &need_comma);
+	      print_set_option(file, tmp, OPTION_RELAXED_UNIQUE_CHECKS, ~flags2,
+	                       "@@session.unique_checks", &need_comma);
+	      print_set_option(file, tmp, OPTION_NOT_AUTOCOMMIT, ~flags2,
+	                       "@@session.autocommit", &need_comma);
+	      my_b_printf(file,"%s\n", print_event_info->delimiter);
+	      print_event_info->flags2= flags2;
+	    }
+	}
   }
 
   /*
@@ -4178,6 +4523,7 @@ void Query_log_event::print_query_header(IO_CACHE* file,
       (unlikely(print_event_info->sql_mode != sql_mode ||
                 !print_event_info->sql_mode_inited)))
   {
+  if (!is_flashback)
     my_b_printf(file,"SET @@session.sql_mode=%lu%s\n",
                 (ulong)sql_mode, print_event_info->delimiter);
     print_event_info->sql_mode= sql_mode;
@@ -4186,6 +4532,7 @@ void Query_log_event::print_query_header(IO_CACHE* file,
   if (print_event_info->auto_increment_increment != auto_increment_increment ||
       print_event_info->auto_increment_offset != auto_increment_offset)
   {
+  if (!is_flashback)
     my_b_printf(file,"SET @@session.auto_increment_increment=%u, @@session.auto_increment_offset=%u%s\n",
                 auto_increment_increment,auto_increment_offset,
                 print_event_info->delimiter);
@@ -4204,9 +4551,11 @@ void Query_log_event::print_query_header(IO_CACHE* file,
     if (cs_info)
     {
       /* for mysql client */
+	  if (!is_flashback)
       my_b_printf(file, "/*!\\C %s */%s\n",
                   cs_info->csname, print_event_info->delimiter);
     }
+	if (!is_flashback)
     my_b_printf(file,"SET "
                 "@@session.character_set_client=%d,"
                 "@@session.collation_connection=%d,"
@@ -4224,6 +4573,7 @@ void Query_log_event::print_query_header(IO_CACHE* file,
     if (memcmp(print_event_info->time_zone_str,
                time_zone_str, time_zone_len+1))
     {
+    if (!is_flashback)
       my_b_printf(file,"SET @@session.time_zone='%s'%s\n",
                   time_zone_str, print_event_info->delimiter);
       memcpy(print_event_info->time_zone_str, time_zone_str, time_zone_len+1);
@@ -4231,24 +4581,30 @@ void Query_log_event::print_query_header(IO_CACHE* file,
   }
   if (lc_time_names_number != print_event_info->lc_time_names_number)
   {
+  if (!is_flashback)
     my_b_printf(file, "SET @@session.lc_time_names=%d%s\n",
                 lc_time_names_number, print_event_info->delimiter);
     print_event_info->lc_time_names_number= lc_time_names_number;
   }
   if (charset_database_number != print_event_info->charset_database_number)
   {
-    if (charset_database_number)
+    if (charset_database_number) {
+		if (!is_flashback)
       my_b_printf(file, "SET @@session.collation_database=%d%s\n",
                   charset_database_number, print_event_info->delimiter);
-    else
+    } else {
+		if (!is_flashback)
       my_b_printf(file, "SET @@session.collation_database=DEFAULT%s\n",
                   print_event_info->delimiter);
+    }
     print_event_info->charset_database_number= charset_database_number;
   }
-  if (explicit_defaults_ts != TERNARY_UNSET)
-    my_b_printf(file, "SET @@session.explicit_defaults_for_timestamp=%d%s\n",
+  if (explicit_defaults_ts != TERNARY_UNSET) {
+  	if (!is_flashback)
+    	my_b_printf(file, "SET @@session.explicit_defaults_for_timestamp=%d%s\n",
                 explicit_defaults_ts == TERNARY_OFF? 0 : 1,
                 print_event_info->delimiter);
+  }
 }
 
 
@@ -4263,8 +4619,12 @@ void Query_log_event::print(FILE* file, PRINT_EVENT_INFO* print_event_info)
   DBUG_EXECUTE_IF ("simulate_file_write_error",
                    {head->write_pos= head->write_end- 500;});
   print_query_header(head, print_event_info);
-  my_b_write(head, (uchar*) query, q_len);
-  my_b_printf(head, "\n%s\n", print_event_info->delimiter);
+  if (!is_only_print_info) {
+  	  if (!is_flashback)  {
+		  my_b_write(head, (uchar*) query, q_len);
+		  my_b_printf(head, "\n%s\n", print_event_info->delimiter);
+  	  }
+  }
 }
 #endif /* MYSQL_CLIENT */
 
@@ -4972,7 +5332,7 @@ void Start_log_event_v3::print(FILE* file, PRINT_EVENT_INFO* print_event_info)
 
   IO_CACHE *const head= &print_event_info->head_cache;
 
-  if (!print_event_info->short_form)
+  if ((!print_event_info->short_form) && (!is_only_print_info))
   {
     print_header(head, print_event_info, FALSE);
     my_b_printf(head, "\tStart: binlog v %d, server v %s created ",
@@ -5009,7 +5369,7 @@ void Start_log_event_v3::print(FILE* file, PRINT_EVENT_INFO* print_event_info)
   }
   if (temp_buf &&
       print_event_info->base64_output_mode != BASE64_OUTPUT_NEVER &&
-      !print_event_info->short_form)
+      !print_event_info->short_form && !is_only_print_info)
   {
     if (print_event_info->base64_output_mode != BASE64_OUTPUT_DECODE_ROWS)
       my_b_printf(head, "BINLOG '\n");
@@ -5036,6 +5396,9 @@ void Start_log_event_v3::print(FILE* file, PRINT_EVENT_INFO* print_event_info)
       my_b_printf(head, "/*!50616 SET @@SESSION.GTID_NEXT='AUTOMATIC'*/%s\n",
                   print_event_info->delimiter);
   }
+
+  if (is_only_print_info)
+    print_event_info->printed_fd_event= TRUE;
   DBUG_VOID_RETURN;
 }
 #endif /* MYSQL_CLIENT */
@@ -5786,6 +6149,7 @@ void Load_log_event::print(FILE* file_arg, PRINT_EVENT_INFO* print_event_info,
   if (!print_event_info->short_form)
   {
     print_header(head, print_event_info, FALSE);
+	
     my_b_printf(head, "\tQuery\tthread_id=%u\texec_time=%ld\n",
                 thread_id, exec_time);
   }
@@ -6261,6 +6625,10 @@ void Rotate_log_event::print(FILE* file, PRINT_EVENT_INFO* print_event_info)
 
   if (print_event_info->short_form)
     return;
+
+  if (is_only_print_info)
+  	return;
+  
   print_header(head, print_event_info, FALSE);
   my_b_printf(head, "\tRotate to ");
   if (new_log_ident)
@@ -6790,15 +7158,18 @@ void Xid_log_event::print(FILE* file, PRINT_EVENT_INFO* print_event_info)
 {
   IO_CACHE *const head= &print_event_info->head_cache;
 
+  if (!is_flashback)	
   if (!print_event_info->short_form)
   {
     char buf[64];
     longlong10_to_str(xid, buf, 10);
-
-    print_header(head, print_event_info, FALSE);
-    my_b_printf(head, "\tXid = %s\n", buf);
+	if (!is_flashback) {
+    	print_header(head, print_event_info, FALSE);
+    	my_b_printf(head, "\tXid = %s\n", buf);
+	}
   }
-  my_b_printf(head, "COMMIT%s\n", print_event_info->delimiter);
+  if (!is_flashback)
+  	my_b_printf(head, "COMMIT%s\n", print_event_info->delimiter);
 }
 #endif /* MYSQL_CLIENT */
 
@@ -9016,6 +9387,8 @@ Rows_log_event::Rows_log_event(const char *buf, uint event_len,
 #endif
     m_rows_end= m_rows_buf + row.size() - 1;
     m_rows_cur= m_rows_end;
+	// Flashback
+	m_rows_buf_offset = event_len - data_size;
   }
   /*
     -Check that malloc() succeeded in allocating memory for the row
@@ -11226,6 +11599,24 @@ void Rows_log_event::print_helper(FILE *file,
                 last_stmt_event ? " flags: STMT_END_F" : "");
     print_base64(body, print_event_info, !last_stmt_event);
   }
+  
+
+  IO_CACHE *const footer= &print_event_info->footer_cache;
+  
+  if (get_flags(STMT_END_F)) //Flashback
+  {
+    size_t bytes_in_cache= 0;
+    char *buff= 0;
+
+    buff= copy_event_cache_to_string_and_reinit(head, &bytes_in_cache);
+    output_buf.append(buff, bytes_in_cache);
+
+    buff= copy_event_cache_to_string_and_reinit(body, &bytes_in_cache);
+    output_buf.append(buff, bytes_in_cache);
+
+    buff= copy_event_cache_to_string_and_reinit(footer, &bytes_in_cache);
+    output_buf.append(buff, bytes_in_cache);	
+  }
 }
 #endif
 
@@ -12943,16 +13334,18 @@ Gtid_log_event::print(FILE *file, PRINT_EVENT_INFO *print_event_info)
 {
   char buffer[MAX_SET_STRING_LENGTH + 1];
   IO_CACHE *const head= &print_event_info->head_cache;
-  if (!print_event_info->short_form)
-  {
-    print_header(head, print_event_info, FALSE);
-    my_b_printf(head, "\t%s\tlast_committed=%llu\tsequence_number=%llu\n",
-                get_type_code() == binary_log::GTID_LOG_EVENT ?
-                "GTID" : "Anonymous_GTID",
-                last_committed, sequence_number);
+  if (!flashback_opt) {
+	  if (!print_event_info->short_form)
+	  {
+	    print_header(head, print_event_info, FALSE);
+	    my_b_printf(head, "\t%s\tlast_committed=%llu\tsequence_number=%llu\n",
+	                get_type_code() == binary_log::GTID_LOG_EVENT ?
+	                "GTID" : "Anonymous_GTID",
+	                last_committed, sequence_number);
+	  }
+	  to_string(buffer);
+	  my_b_printf(head, "%s%s\n", buffer, print_event_info->delimiter);
   }
-  to_string(buffer);
-  my_b_printf(head, "%s%s\n", buffer, print_event_info->delimiter);
 }
 #endif
 
@@ -13154,14 +13547,16 @@ void Previous_gtids_log_event::print(FILE *file,
   IO_CACHE *const head= &print_event_info->head_cache;
   char *str= get_str(NULL, &Gtid_set::commented_string_format);
   if (str != NULL)
-  {
-    if (!print_event_info->short_form)
-    {
-      print_header(head, print_event_info, FALSE);
-      my_b_printf(head, "\tPrevious-GTIDs\n");
-    }
-    my_b_printf(head, "%s\n", str);
-    my_free(str);
+  { 
+  	if (!flashback_opt) {
+	    if (!print_event_info->short_form)
+	    {
+	      print_header(head, print_event_info, FALSE);
+	      my_b_printf(head, "\tPrevious-GTIDs\n");
+	    }
+	    my_b_printf(head, "%s\n", str);
+	    my_free(str);
+  	}
   }
 }
 #endif

@@ -647,7 +647,7 @@ public:
       m_extra_row_data(0),
       columns_before_image(0),
       columns_after_image(0),
-      row(0)
+      row(0), data_size(0)
   {}
 
  /**
@@ -700,6 +700,8 @@ protected:
   std::vector<uint8_t> columns_before_image;
   std::vector<uint8_t> columns_after_image;
   std::vector<uint8_t> row;
+
+  size_t data_size;
 
 public:
   unsigned long long get_table_id() const

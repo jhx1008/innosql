@@ -69,6 +69,44 @@ my_b_copy_to_file(IO_CACHE *cache, FILE *file)
   DBUG_RETURN(0);
 }
 
+/* Flashback */
+char *my_b_copy_to_string(IO_CACHE *cache, size_t *bytes_in_cache)
+{
+	char *buff;
+	char *tmp_buff;
+	size_t now_size;
+	size_t inc_size;
+ 
+	/* Reinit the cache to read from the beginning of the cache */
+	if (reinit_io_cache(cache, READ_CACHE, 0L, FALSE, FALSE))
+	  return NULL;
+ 
+	now_size= my_b_bytes_in_cache(cache);
+	inc_size= 0;
+	buff= (char *) my_malloc(PSI_NOT_INSTRUMENTED, now_size + 1, MYF(0));
+	tmp_buff= buff;
+	do
+	{
+	  now_size+= inc_size;
+	  if(inc_size > 0)
+	  {
+		buff= (char *) my_realloc(PSI_NOT_INSTRUMENTED, buff, now_size + 1, MYF(0));
+		tmp_buff= buff + (now_size - inc_size);
+		memcpy(tmp_buff, cache->read_pos, inc_size);
+	  }
+	  else
+	  {
+		memcpy(tmp_buff, cache->read_pos, now_size);
+	  }
+	  cache->read_pos= cache->read_end;
+	} while ((inc_size= my_b_fill(cache)));
+  buff[now_size]= '\0';
+ 
+  reinit_io_cache(cache, WRITE_CACHE, 0, FALSE, TRUE);
+  *bytes_in_cache= now_size;
+  return buff;
+}
+/* End */
 
 my_off_t my_b_append_tell(IO_CACHE* info)
 {

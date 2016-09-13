@@ -27,6 +27,7 @@ Created July 18, 2007 Vasil Dimov
 #define i_s_h
 
 const char plugin_author[] = "Oracle Corporation";
+const char netease_plugin_author[] = "NetEase Corporation";
 
 extern struct st_mysql_plugin	i_s_innodb_trx;
 extern struct st_mysql_plugin	i_s_innodb_locks;
@@ -58,6 +59,8 @@ extern struct st_mysql_plugin	i_s_innodb_sys_foreign_cols;
 extern struct st_mysql_plugin	i_s_innodb_sys_tablespaces;
 extern struct st_mysql_plugin	i_s_innodb_sys_datafiles;
 extern struct st_mysql_plugin	i_s_innodb_sys_virtual;
+extern struct st_mysql_plugin	i_s_innodb_trx_rollback_segment;
+extern struct st_mysql_plugin	i_s_innodb_trx_undo;
 
 /** Fill handlerton based INFORMATION_SCHEMA.FILES table.
 @param[in,out]	thd	thread/connection descriptor

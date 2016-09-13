@@ -3,9 +3,9 @@ call mtr.add_suppression("Plugin mysqlx reported: .SSL_CTX_load_verify_locations
 call mtr.add_suppression("Plugin mysqlx reported: .Error parsing message of type 17:");
 # restart
 Bug #21472634
-Id	User	Host	db	Command		State	Info
-$PROC_1_ID	root	localhost	test	Sleep		null
-$PROC_2_ID	root	localhost	null	Query	cleaning up	PLUGIN: show processlist
+Id	User	Host	db	Command		ACK_WAIT_TIME	State	Info
+$PROC_1_ID	root	localhost	test	Sleep	0		
+$PROC_2_ID	root	localhost	null	Query	0	cleaning up	cleaning up
 0 rows affected
 RUN SELECT id,user,command,state FROM information_schema.processlist ORDER BY id
 id	user	command	state

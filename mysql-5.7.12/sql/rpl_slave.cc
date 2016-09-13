@@ -60,6 +60,7 @@
 
 #include <signal.h>
 #include <algorithm>
+#include "sql_statistics.h"
 
 using std::min;
 using std::max;
@@ -6919,6 +6920,7 @@ extern "C" void *handle_slave_sql(void *arg)
 #endif
 
   thd = new THD; // note that contructor of THD uses DBUG_ !
+  thd->m_sql_info = statistics_create_sql_info(thd->charset()->number);
   thd->thread_stack = (char*)&thd; // remember where our stack is
   mysql_mutex_lock(&rli->info_thd_lock);
   rli->info_thd= thd;

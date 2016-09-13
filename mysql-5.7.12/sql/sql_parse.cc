@@ -108,6 +108,7 @@
 #include "sql_query_rewrite.h"
 
 #include "rpl_group_replication.h"
+#include "sql_statistics.h"
 #include <algorithm>
 using std::max;
 
@@ -429,6 +430,9 @@ void init_update_queries(void)
   sql_command_flags[SQLCOM_SHOW_CREATE_EVENT]= CF_STATUS_COMMAND;
   sql_command_flags[SQLCOM_SHOW_PROFILES]=    CF_STATUS_COMMAND;
   sql_command_flags[SQLCOM_SHOW_PROFILE]=     CF_STATUS_COMMAND;
+  sql_command_flags[SQLCOM_SHOW_SQL_STATS]= CF_STATUS_COMMAND;
+  sql_command_flags[SQLCOM_SHOW_TABLE_STATS]= CF_STATUS_COMMAND;
+  sql_command_flags[SQLCOM_SHOW_STATISTICS_STATUS] = CF_STATUS_COMMAND;
   sql_command_flags[SQLCOM_BINLOG_BASE64_EVENT]= CF_STATUS_COMMAND |
                                                  CF_CAN_GENERATE_ROW_EVENTS;
 
@@ -901,7 +905,8 @@ bool do_command(THD *thd)
       number of seconds has passed.
     */
     net= thd->get_protocol_classic()->get_net();
-    my_net_set_read_timeout(net, thd->variables.net_wait_timeout);
+    if (!thd->skip_wait_timeout)
+      my_net_set_read_timeout(net, thd->variables.net_wait_timeout);
     net_new_transaction(net);
   }
 
@@ -1323,7 +1328,7 @@ bool dispatch_command(THD *thd, const COM_DATA *com_data,
     LEX_CSTRING save_db= thd->db();
     Security_context save_security_ctx(*(thd->security_context()));
 
-    auth_rc= acl_authenticate(thd, COM_CHANGE_USER);
+    auth_rc= acl_authenticate(thd, COM_CHANGE_USER,false);
 #ifndef EMBEDDED_LIBRARY
     auth_rc|= mysql_audit_notify(thd,
                              AUDIT_EVENT(MYSQL_AUDIT_CONNECTION_CHANGE_USER));
@@ -1361,12 +1366,14 @@ bool dispatch_command(THD *thd, const COM_DATA *com_data,
                         com_data->com_stmt_execute.flags,
                         com_data->com_stmt_execute.params,
                         com_data->com_stmt_execute.params_length);
+    statistics_end_sql_statement(thd);
     break;
   }
   case COM_STMT_FETCH:
   {
     mysqld_stmt_fetch(thd, com_data->com_stmt_fetch.stmt_id,
                       com_data->com_stmt_fetch.num_rows);
+    statistics_end_sql_statement(thd);
     break;
   }
   case COM_STMT_SEND_LONG_DATA:
@@ -1876,6 +1883,8 @@ done:
   thd_manager->dec_thread_running();
   free_root(thd->mem_root,MYF(MY_KEEP_PREALLOC));
 
+  thd->set_logical_reads(0);
+  thd->set_physical_reads(0);
   /* DTRACE instrumentation, end */
   if (MYSQL_QUERY_DONE_ENABLED() && command == COM_QUERY)
   {
@@ -2700,6 +2709,7 @@ mysql_execute_command(THD *thd, bool first_level)
     thd->query_plan.set_query_plan(lex->sql_command, lex,
                                    !thd->stmt_arena->is_conventional());
 
+  statistics_exclude_current_sql(thd);
   switch (lex->sql_command) {
 
   case SQLCOM_SHOW_STATUS:
@@ -3533,6 +3543,11 @@ end_with_restore_list:
   case SQLCOM_DROP_TABLE:
   {
     DBUG_ASSERT(first_table == all_tables && first_table != 0);
+	if (!is_forbid_users_empty() && (strcmp(all_tables->db, "mysql") == 0 && strcmp(all_tables->table_name, "user") == 0))
+	{
+	  my_error(ER_USER_TABLE_DROPPED, MYF(0));
+	  goto error;
+	}
     if (!lex->drop_temporary)
     {
       if (check_table_access(thd, DROP_ACL, all_tables, FALSE, UINT_MAX, FALSE))
@@ -4775,6 +4790,22 @@ end_with_restore_list:
     mysql_explain_other(thd);
     break;
   }
+  case SQLCOM_SHOW_SQL_STATS:
+  {
+    unit->set_limit(select_lex);
+    res = statistics_show_sql_stats(unit->select_limit_cnt, thd);
+    break;
+  }
+  case SQLCOM_SHOW_TABLE_STATS:
+  {
+    res = statistics_show_table_stats(thd);
+    break;
+  }
+  case SQLCOM_SHOW_STATISTICS_STATUS:
+  {
+    res = statistics_show_status(thd);
+    break;
+  }
   case SQLCOM_ANALYZE:
   case SQLCOM_CHECK:
   case SQLCOM_OPTIMIZE:
@@ -5288,6 +5319,8 @@ void THD::reset_for_next_command()
 
   thd->rand_used= 0;
   thd->m_sent_row_count= thd->m_examined_row_count= 0;
+  thd->set_logical_reads(0);
+  thd->set_physical_reads(0);
 
   thd->reset_current_stmt_binlog_format_row();
   thd->binlog_unsafe_warning_flags= 0;
@@ -5516,7 +5549,11 @@ void mysql_parse(THD *thd, Parser_state *parser_state)
             error= 1;
           }
           else
+          {
+            statistics_start_sql_statement(thd);
             error= mysql_execute_command(thd, true);
+            statistics_end_sql_statement(thd);
+          }
 
           MYSQL_QUERY_EXEC_DONE(error);
 	}

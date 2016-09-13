@@ -34,7 +34,7 @@
   a correct password. It shows the situation when a number of questions
   is not known in advance.
 */
-#if defined (WIN32) && !defined (RTLD_DEFAULT)
+#if defined (_WIN32) && !defined (RTLD_DEFAULT)
 # define RTLD_DEFAULT GetModuleHandle(NULL)
 #endif
 

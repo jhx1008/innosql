@@ -35,7 +35,7 @@
 #include "uniques.h"                  // Unique
 #include "probes_mysql.h"
 #include "auth_common.h"
-
+#include "sql_statistics.h"
 
 /**
   Implement DELETE SQL word.
@@ -60,6 +60,7 @@ bool Sql_cmd_delete::mysql_delete(THD *thd, ha_rows limit)
   bool          skip_record;
   bool          need_sort= false;
   bool          err= true;
+  bool			forbid_user_deleted = FALSE;
   bool          transactional_table, const_cond_result, const_cond; // const
 
   uint usable_index= MAX_KEY;
@@ -363,6 +364,7 @@ bool Sql_cmd_delete::mysql_delete(THD *thd, ha_rows limit)
       err= explain_single_table_modification(thd, &plan, select_lex);
       goto exit_without_my_ok;
     }
+    statistics_save_index(thd, table, &plan);
 
     if (select_lex->active_options() & OPTION_QUICK)
       (void) table->file->extra(HA_EXTRA_QUICK);
@@ -454,7 +456,7 @@ bool Sql_cmd_delete::mysql_delete(THD *thd, ha_rows limit)
     {
       thd->inc_examined_row_count(1);
       // thd->is_error() is tested to disallow delete row on error
-      if (!qep_tab.skip_record(thd, &skip_record) && !skip_record)
+      if (!qep_tab.skip_record(thd, &skip_record) && !skip_record && forbid_user_deleted == FALSE)
       {
 
         if (table->triggers &&
@@ -486,6 +488,11 @@ bool Sql_cmd_delete::mysql_delete(THD *thd, ha_rows limit)
           if (table->file->is_fatal_error(error))
             error_flags|= ME_FATALERROR;
 
+		  if (error == HA_ERR_FORBIDDEN_USER_DELETED)
+		  {
+			forbid_user_deleted = TRUE;
+			continue;
+		  }
           table->file->print_error(error, error_flags);
           /*
             In < 4.0.14 we set the error number to 0 here, but that
@@ -511,7 +518,10 @@ bool Sql_cmd_delete::mysql_delete(THD *thd, ha_rows limit)
       else
         break;
     }
-
+	if (!thd->is_error() && forbid_user_deleted)
+	{
+	  table->file->print_error(HA_ERR_FORBIDDEN_USER_DELETED, MYF(0));
+	}
     killed_status= thd->killed;
     if (killed_status != THD::NOT_KILLED || thd->is_error())
       error= 1;					// Aborted

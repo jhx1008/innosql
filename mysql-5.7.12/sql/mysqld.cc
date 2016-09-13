@@ -103,6 +103,7 @@
 #include "my_default.h"
 #include "mysql_version.h"
 
+#include "sql_statistics.h"
 #ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
 #include "../storage/perfschema/pfs_server.h"
 #include <pfs_idle_provider.h>
@@ -300,6 +301,9 @@ static bool binlog_format_used= false;
 LEX_STRING opt_init_connect, opt_init_slave;
 
 /* Global variables */
+ulong slow_query_type;
+ulong long_query_io_ulong;
+bool opt_slow_io_log;
 
 bool opt_bin_log, opt_ignore_builtin_innodb= 0;
 bool opt_general_log, opt_slow_log, opt_general_log_raw;
@@ -375,6 +379,7 @@ char *opt_disabled_storage_engines;
 uint opt_server_id_bits= 0;
 ulong opt_server_id_mask= 0;
 my_bool read_only= 0, opt_readonly= 0;
+my_bool opt_innodb_only = 0;
 my_bool super_read_only= 0, opt_super_readonly= 0;
 my_bool opt_require_secure_transport= 0;
 my_bool use_temp_pool, relay_log_purge;
@@ -427,6 +432,7 @@ volatile sig_atomic_t calling_initgroups= 0; /**< Used in SIGSEGV handler. */
 const char *timestamp_type_names[]= {"UTC", "SYSTEM", NullS};
 ulong opt_log_timestamps;
 uint mysqld_port, test_flags, select_errors, dropping_tables, ha_open_options;
+uint mysqld_extra_port;
 uint mysqld_port_timeout;
 ulong delay_key_write_options;
 uint protocol_version;
@@ -474,7 +480,8 @@ ulong delayed_insert_errors,flush_time;
 ulong specialflag=0;
 ulong binlog_cache_use= 0, binlog_cache_disk_use= 0;
 ulong binlog_stmt_cache_use= 0, binlog_stmt_cache_disk_use= 0;
-ulong max_connections, max_connect_errors;
+ulong max_connections, max_connect_errors, super_connections_after_max;
+ulong extra_max_connections;
 ulong rpl_stop_slave_timeout= LONG_TIMEOUT;
 my_bool log_bin_use_v1_row_events= 0;
 bool thread_cache_size_specified= false;
@@ -691,7 +698,7 @@ char *master_info_file;
 char *relay_log_info_file, *report_user, *report_password, *report_host;
 char *opt_relay_logname = 0, *opt_relaylog_index_name=0;
 char *opt_general_logname, *opt_slow_logname, *opt_bin_logname;
-
+char *user_list_string;
 /* Static variables */
 
 static volatile sig_atomic_t kill_in_progress;
@@ -1607,8 +1614,8 @@ static bool network_init(void)
 
     Mysqld_socket_listener *mysqld_socket_listener=
       new (std::nothrow) Mysqld_socket_listener(bind_addr_str,
-                                                mysqld_port, back_log,
-                                                mysqld_port_timeout,
+                                                mysqld_port, mysqld_extra_port,
+                                                back_log, mysqld_port_timeout,
                                                 unix_sock_name);
     if (mysqld_socket_listener == NULL)
       return true;
@@ -2444,6 +2451,8 @@ SHOW_VAR com_status_vars[]= {
   {"show_relaylog_events", (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_RELAYLOG_EVENTS]),       SHOW_LONG_STATUS, SHOW_SCOPE_ALL},
   {"show_slave_hosts",     (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_SLAVE_HOSTS]),           SHOW_LONG_STATUS, SHOW_SCOPE_ALL},
   {"show_slave_status",    (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_SLAVE_STAT]),            SHOW_LONG_STATUS, SHOW_SCOPE_ALL},
+  {"show_sql_status",      (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_SQL_STATS]),			 SHOW_LONG_STATUS, SHOW_SCOPE_ALL},
+  {"show_statistics_status",(char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_STATISTICS_STATUS]),	 SHOW_LONG_STATUS, SHOW_SCOPE_ALL},
   {"show_status",          (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_STATUS]),                SHOW_LONG_STATUS, SHOW_SCOPE_ALL},
   {"show_storage_engines", (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_STORAGE_ENGINES]),       SHOW_LONG_STATUS, SHOW_SCOPE_ALL},
   {"show_table_status",    (char*) offsetof(STATUS_VAR, com_stat[(uint) SQLCOM_SHOW_TABLE_STATUS]),          SHOW_LONG_STATUS, SHOW_SCOPE_ALL},
@@ -2759,7 +2768,7 @@ int init_common_variables()
     of SQLCOM_ constants.
   */
   compile_time_assert(sizeof(com_status_vars)/sizeof(com_status_vars[0]) - 1 ==
-                     SQLCOM_END + 7);
+                     SQLCOM_END + 6);
 #endif
 
   if (get_options(&remaining_argc, &remaining_argv))
@@ -2782,7 +2791,10 @@ int init_common_variables()
 
   sql_print_information("%s (mysqld %s) starting as process %lu ...",
                         my_progname, server_version, (ulong) getpid());
-
+  opt_slow_log |= (slow_query_type & 0x0001);
+  opt_slow_io_log = (slow_query_type & 0x0002) >> 1;
+  slow_query_type |= opt_slow_log;
+  set_io_stat_flag(&opt_slow_io_log);
 
 #ifndef EMBEDDED_LIBRARY
   if (opt_help && !opt_verbose)
@@ -3010,7 +3022,7 @@ int init_common_variables()
                       "--general-log-file option, log tables are used. "
                       "To enable logging to files use the --log-output=file option.");
 
-  if (opt_slow_log && opt_slow_logname && !(log_output_options & LOG_FILE)
+  if ((opt_slow_log || opt_slow_io_log) && opt_slow_logname && !(log_output_options & LOG_FILE)
       && !(log_output_options & LOG_NONE))
     sql_print_warning("Although a path was specified for the "
                       "--slow-query-log-file option, log tables are used. "
@@ -3452,7 +3464,6 @@ static int generate_server_uuid()
                     " to allocate the THD.");
     return 1;
   }
-
   thd->thread_stack= (char*) &thd;
   thd->store_globals();
 
@@ -4076,8 +4087,12 @@ a file name for --log-bin-index option", opt_binlog_index_name);
   query_logger.set_handlers(log_output_options);
 
   // Open slow log file if enabled.
-  if (opt_slow_log && query_logger.reopen_log_file(QUERY_LOG_SLOW))
-    opt_slow_log= false;
+  if ((opt_slow_log || opt_slow_io_log) && query_logger.reopen_log_file(QUERY_LOG_SLOW))
+  {
+	opt_slow_log = false;
+	opt_slow_io_log = false;
+	slow_query_type = 0;
+  }
 
   // Open general log file if enabled.
   if (opt_general_log && query_logger.reopen_log_file(QUERY_LOG_GENERAL))
@@ -4280,7 +4295,7 @@ static void test_lc_time_sz()
     {
       DBUG_PRINT("Wrong max day name(or month name) length for locale:",
                  ("%s", (*loc)->name));
-      DBUG_ASSERT(0);
+      //DBUG_ASSERT(0);
     }
   }
   DBUG_VOID_RETURN;
@@ -4902,6 +4917,7 @@ int mysqld_main(int argc, char **argv)
 
   create_compress_gtid_table_thread();
 
+  statistics_init();
   sql_print_information(ER_DEFAULT(ER_STARTUP),
                         my_progname,
                         server_version,
@@ -4991,7 +5007,7 @@ int mysqld_main(int argc, char **argv)
   */
   PSI_THREAD_CALL(delete_current_thread)();
 #endif
-
+  statistics_deinit();
   DBUG_PRINT("info", ("Waiting for shutdown proceed"));
   int ret= 0;
 #ifdef _WIN32
@@ -5345,14 +5361,14 @@ void adjust_open_files_limit(ulong *requested_open_files)
   ulong effective_open_files;
 
   /* MyISAM requires two file handles per table. */
-  limit_1= 10 + max_connections + table_cache_size * 2;
+  limit_1= 10 + max_connections + extra_max_connections + table_cache_size * 2;
 
   /*
     We are trying to allocate no less than max_connections*5 file
     handles (i.e. we are trying to set the limit so that they will
     be available).
   */
-  limit_2= max_connections * 5;
+  limit_2= (max_connections + extra_max_connections) * 5;
 
   /* Try to allocate no less than 5000 by default. */
   limit_3= open_files_limit ? open_files_limit : 5000;
@@ -6561,6 +6577,16 @@ show_ssl_get_server_not_after(THD *thd, SHOW_VAR *var, char *buff)
 
 #endif /* HAVE_OPENSSL && !EMBEDDED_LIBRARY */
 
+#ifdef HAVE_POOL_OF_THREADS
+int show_threadpool_idle_threads(THD *thd, SHOW_VAR *var, char *buff)
+{
+  var->type= SHOW_INT;
+  var->value= buff;
+  *(int *)buff= tp_get_idle_thread_count();
+  return 0;
+}
+#endif
+
 static int show_slave_open_temp_tables(THD *thd, SHOW_VAR *var, char *buf)
 {
   var->type= SHOW_INT;
@@ -6730,6 +6756,10 @@ SHOW_VAR status_vars[]= {
   {"Tc_log_max_pages_used",    (char*) &tc_log_max_pages_used,                         SHOW_LONG,              SHOW_SCOPE_GLOBAL},
   {"Tc_log_page_size",         (char*) &tc_log_page_size,                              SHOW_LONG_NOFLUSH,      SHOW_SCOPE_GLOBAL},
   {"Tc_log_page_waits",        (char*) &tc_log_page_waits,                             SHOW_LONG,              SHOW_SCOPE_GLOBAL},
+#ifdef HAVE_POOL_OF_THREADS
+  {"Threadpool_idle_threads",  (char *) &show_threadpool_idle_threads,                 SHOW_FUNC,              SHOW_SCOPE_GLOBAL},
+  {"Threadpool_threads",       (char *) &tp_stats.num_worker_threads,                  SHOW_INT,               SHOW_SCOPE_GLOBAL},
+#endif
 #ifndef EMBEDDED_LIBRARY
   {"Threads_cached",           (char*) &Per_thread_connection_handler::blocked_pthread_count, SHOW_LONG_NOFLUSH, SHOW_SCOPE_GLOBAL},
 #endif
@@ -6886,6 +6916,7 @@ static int mysql_init_variables(void)
   opt_skip_name_resolve= 0;
   opt_ignore_builtin_innodb= 0;
   opt_general_logname= opt_update_logname= opt_binlog_index_name= opt_slow_logname= NULL;
+  user_list_string = 0;
   opt_tc_log_file= (char *)"tc.log";      // no hostname in tc_log file name !
   opt_secure_auth= 0;
   opt_myisam_log= 0;
@@ -7603,7 +7634,7 @@ static int get_options(int *argc_ptr, char ***argv_ptr)
 
   if ((opt_log_slow_admin_statements || opt_log_queries_not_using_indexes ||
        opt_log_slow_slave_statements) &&
-      !opt_slow_log)
+      !(opt_slow_log || opt_slow_io_log))
     sql_print_warning("options --log-slow-admin-statements, "
                       "--log-queries-not-using-indexes and "
                       "--log-slow-slave-statements have no effect if "
@@ -7761,7 +7792,7 @@ static void set_server_version(void)
   if (!strstr(MYSQL_SERVER_SUFFIX_STR, "-debug"))
     end= my_stpcpy(end, "-debug");
 #endif
-  if (opt_general_log || opt_slow_log || opt_bin_log)
+  if (opt_general_log || opt_slow_log || opt_slow_io_log || opt_bin_log)
     end= my_stpcpy(end, "-log");          // This may slow down system
 #ifdef HAVE_VALGRIND
   if (SERVER_VERSION_LENGTH - (end - server_version) >
@@ -9048,7 +9079,9 @@ PSI_memory_key key_memory_get_all_tables;
 PSI_memory_key key_memory_fill_schema_schemata;
 PSI_memory_key key_memory_native_functions;
 PSI_memory_key key_memory_JSON;
+PSI_memory_key key_memory_top_sql;
 
+PSI_memory_key key_memory_thread_pool_connection;
 #ifdef HAVE_PSI_INTERFACE
 static PSI_memory_info all_server_memory[]=
 {
@@ -9102,6 +9135,7 @@ static PSI_memory_info all_server_memory[]=
   { &key_memory_log_event, "Log_event", 0},
   { &key_memory_Incident_log_event_message, "Incident_log_event::message", 0},
   { &key_memory_Rows_query_log_event_rows_query, "Rows_query_log_event::rows_query", 0},
+  { &key_memory_thread_pool_connection, "thread_pool_connection", 0},
 
   { &key_memory_Sort_param_tmp_buffer, "Sort_param::tmp_buffer", 0},
   { &key_memory_Filesort_info_merge, "Filesort_info::merge", 0},
@@ -9191,6 +9225,7 @@ static PSI_memory_info all_server_memory[]=
   { &key_memory_fill_schema_schemata, "fill_schema_schemata", 0},
   { &key_memory_native_functions, "native_functions", PSI_FLAG_GLOBAL},
   { &key_memory_JSON, "JSON", 0 },
+  { &key_memory_top_sql, "top_sql", 0 },
 };
 
 /* TODO: find a good header */

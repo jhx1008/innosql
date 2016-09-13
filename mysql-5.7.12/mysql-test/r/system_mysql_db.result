@@ -24,6 +24,8 @@ slave_master_info
 slave_relay_log_info
 slave_worker_info
 slow_log
+sql_stats
+table_stats
 tables_priv
 time_zone
 time_zone_leap_second
@@ -243,13 +245,15 @@ slow_log	CREATE TABLE `slow_log` (
   `lock_time` time(6) NOT NULL,
   `rows_sent` int(11) NOT NULL,
   `rows_examined` int(11) NOT NULL,
+  `logical_reads` int(11) NOT NULL,
+  `physical_reads` int(11) NOT NULL,
   `db` varchar(512) NOT NULL,
   `last_insert_id` int(11) NOT NULL,
   `insert_id` int(11) NOT NULL,
   `server_id` int(10) unsigned NOT NULL,
   `sql_text` mediumblob NOT NULL,
   `thread_id` bigint(21) unsigned NOT NULL
-) ENGINE=CSV DEFAULT CHARSET=utf8 COMMENT='Slow log'
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 COMMENT='Slow log'
 show tables;
 Tables_in_test
 SET sql_mode = default;

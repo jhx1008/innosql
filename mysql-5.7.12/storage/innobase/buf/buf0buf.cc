@@ -73,6 +73,7 @@ Created 11/5/1995 Heikki Tuuri
 #include <new>
 #include <map>
 #include <sstream>
+#include "sql_iostat.h"
 
 #if defined(HAVE_LIBNUMA) && defined(WITH_NUMA)
 #include <numa.h>
@@ -304,6 +305,8 @@ in a tablespace) have recently been referenced, we may predict
 that the whole area may be needed in the near future, and issue
 the read requests for the whole area.
 */
+
+_io_stat_func_ptr io_stat_func_ptr;
 
 #if (!(defined(UNIV_HOTBACKUP) || defined(UNIV_INNOCHECKSUM)))
 /** Value in microseconds */
@@ -1502,7 +1505,7 @@ buf_chunk_init(
 	chunk->mem = buf_pool->allocator.allocate_large(mem_size,
 							&chunk->mem_pfx);
 
-  if (UNIV_UNLIKELY(chunk->mem == NULL)) {
+	if (UNIV_UNLIKELY(chunk->mem == NULL)) {
 
 		return(NULL);
 	}
@@ -1962,6 +1965,7 @@ buf_pool_init(
 	}
 
 	buf_chunk_map_ref = buf_chunk_map_reg;
+
 	buf_pool_set_sizes();
 	buf_LRU_old_ratio_update(100 * 3/ 8, FALSE);
 
@@ -4229,6 +4233,7 @@ loop:
 	/* Now safe to release page_hash mutex */
 	rw_lock_s_unlock(hash_lock);
 
+	io_stat_func_ptr(LOG_READ);
 got_block:
 
 	if (mode == BUF_GET_IF_IN_POOL || mode == BUF_PEEK_IF_IN_POOL) {
@@ -4758,6 +4763,7 @@ buf_page_optimistic_get(
 #endif /* UNIV_IBUF_COUNT_DEBUG */
 
 	buf_pool = buf_pool_from_block(block);
+	io_stat_func_ptr(LOG_READ);
 	buf_pool->stat.n_page_gets++;
 
 	return(TRUE);
@@ -4866,6 +4872,7 @@ buf_page_get_known_nowait(
 #ifdef UNIV_IBUF_COUNT_DEBUG
 	ut_a((mode == BUF_KEEP_OLD) || ibuf_count_get(block->page.id) == 0);
 #endif
+	io_stat_func_ptr(LOG_READ);
 	buf_pool->stat.n_page_gets++;
 
 	return(TRUE);

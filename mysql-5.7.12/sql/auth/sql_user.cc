@@ -1436,7 +1436,14 @@ bool mysql_drop_user(THD *thd, List <LEX_USER> &list, bool if_exists)
     {
       result= TRUE;
       continue;
-    }  
+    }
+	/* the users in user_list_string not allow to be dropped */
+	if (is_forbid_deleted_user(user_name->user.str, user_name->host.str))
+	{
+	  append_user(thd, &wrong_users, user_name);
+	  result = TRUE;
+	  continue;
+	}
     int ret= handle_grant_data(tables, 1, user_name, NULL);
     if (ret <= 0)
     {

@@ -212,6 +212,10 @@ alter table db comment='Database privileges';
 alter table user comment='Users and global privileges';
 alter table func comment='User defined functions';
 
+ALTER TABLE slow_log
+ADD logical_reads INTEGER NOT NULL DEFAULT 0 AFTER rows_examined, 
+ADD physical_reads INTEGER NOT NULL  DEFAULT 0 AFTER logical_reads;
+
 # Convert all tables to UTF-8 with binary collation
 # and reset all char columns to correct width
 ALTER TABLE user
@@ -292,6 +296,8 @@ ALTER TABLE slow_log
   MODIFY lock_time TIME(6) NOT NULL,
   MODIFY rows_sent INTEGER NOT NULL,
   MODIFY rows_examined INTEGER NOT NULL,
+  MODIFY logical_reads INTEGER NOT NULL,
+  MODIFY physical_reads INTEGER NOT NULL,
   MODIFY db VARCHAR(512) NOT NULL,
   MODIFY last_insert_id INTEGER NOT NULL,
   MODIFY insert_id INTEGER NOT NULL,
@@ -678,6 +684,8 @@ UPDATE user SET password_expired = 'N' WHERE @hadPasswordExpired=0;
 
 -- need to compensate for the ALTER TABLE user .. CONVERT TO CHARACTER SET above
 ALTER TABLE user MODIFY password_expired ENUM('N', 'Y') COLLATE utf8_general_ci DEFAULT 'N' NOT NULL;
+
+ALTER TABLE sql_stats ADD  DB_NAME VARCHAR(32) COLLATE utf8_bin NOT NULL DEFAULT '' AFTER SQL_TEXT;
 
 -- Need to pre-fill mysql.proxies_priv with access for root even when upgrading from
 -- older versions

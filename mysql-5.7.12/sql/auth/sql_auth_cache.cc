@@ -55,6 +55,7 @@ Prealloced_array<ACL_USER, ACL_PREALLOC_SIZE> *acl_users= NULL;
 Prealloced_array<ACL_PROXY_USER, ACL_PREALLOC_SIZE> *acl_proxy_users= NULL;
 Prealloced_array<ACL_DB, ACL_PREALLOC_SIZE> *acl_dbs= NULL;
 Prealloced_array<ACL_HOST_AND_IP, ACL_PREALLOC_SIZE> *acl_wild_hosts= NULL;
+Prealloced_array<LEX_USER, ACL_PREALLOC_SIZE> *forbid_deleted_users = NULL;
 
 HASH column_priv_hash, proc_priv_hash, func_priv_hash;
 hash_filo *acl_cache;
@@ -1348,6 +1349,97 @@ validate_user_plugin_records()
   DBUG_VOID_RETURN;
 }
 
+static void init_forbid_deleted_users(const char *user_list_string)
+{
+  if (user_list_string == NULL) return;
+
+  LEX_USER user;
+  char *buffer = my_strdup(PSI_NOT_INSTRUMENTED,user_list_string, 0);
+  char *ptr = buffer;
+  char *outer_ptr, *outer_result;
+  forbid_deleted_users = new Prealloced_array<LEX_USER, ACL_PREALLOC_SIZE>(key_memory_acl_mem);
+  while ((outer_result = my_strtok_r(ptr, ",", &outer_ptr)) != NULL)
+  {
+	char *start = outer_result;
+	char *end = start + strlen(outer_result);
+	char *pos = start;
+	while (pos != end)
+	{
+	  if (*pos == '@')
+	  {
+		break;
+	  }
+	  pos++;
+	}
+	if (end == pos) continue;
+	uint user_len = pos - start + 1;
+	uint host_len = end - pos;
+	char *u = (char *)my_malloc(PSI_NOT_INSTRUMENTED, user_len, 0);
+	memcpy(u, start, user_len - 1);
+	u[user_len - 1] = '\0';
+	char *h = (char *)my_malloc(PSI_NOT_INSTRUMENTED, host_len, 0);
+	memcpy(h, pos + 1, host_len - 1);
+	h[host_len - 1] = '\0';
+	user.user.str = u; user.user.length = user_len;
+	user.host.str = h; user.host.length = host_len;
+	forbid_deleted_users->push_back(user);
+	ptr = NULL;
+  }
+  my_free(buffer);
+}
+
+static void free_forbid_deleted_users()
+{
+  if (forbid_deleted_users == NULL)
+    return;
+
+  for (LEX_USER *lex_user = forbid_deleted_users->begin(); 
+			lex_user != forbid_deleted_users->end(); ++lex_user)
+  {
+    my_free((void*)lex_user->user.str);
+    my_free((void*)lex_user->host.str);
+  }
+  forbid_deleted_users->clear();
+  delete forbid_deleted_users;
+  forbid_deleted_users = NULL;
+}
+
+bool is_forbid_deleted_user(const char *user, const char *host)
+{
+  for (LEX_USER *lex_user = forbid_deleted_users->begin();
+			lex_user != forbid_deleted_users->end(); ++lex_user)
+  {
+	if (lex_user != NULL)
+	{
+	  if (strcmp(lex_user->user.str, user) == 0 && strcmp(lex_user->host.str, host) == 0)
+	  {
+		return true;
+	  }
+	}
+  }
+  return false;
+}
+
+bool contain_forbid_deleted_user(const char *record)
+{
+  for (LEX_USER *lex_user = forbid_deleted_users->begin();
+			lex_user != forbid_deleted_users->end(); ++lex_user)
+  {
+	if (lex_user != NULL)
+	{
+	  if (strstr(record, lex_user->user.str) != NULL && strstr(record, lex_user->host.str) != NULL)
+	  {
+		return true;
+	  }
+	}
+  }
+  return false;
+}
+
+bool is_forbid_users_empty()
+{
+  return forbid_deleted_users->size() == 0;
+}
 
 /*
   Initialize structures responsible for user/db-level privilege checking and
@@ -1395,6 +1487,7 @@ my_bool acl_init(bool dont_read_acl_tables)
   if (!native_password_plugin)
     DBUG_RETURN(1);
 
+  init_forbid_deleted_users(user_list_string);
   if (dont_read_acl_tables)
   {
     DBUG_RETURN(0); /* purecov: tested */
@@ -1977,6 +2070,7 @@ void acl_free(bool end)
   acl_wild_hosts= NULL;
   delete acl_proxy_users;
   acl_proxy_users= NULL;
+  free_forbid_deleted_users();
   my_hash_free(&acl_check_hosts);
   if (!end)
     acl_cache->clear(1); /* purecov: inspected */
