@@ -210,6 +210,14 @@ void threadpool_remove_connection(THD *thd)
 
   Global_THD_manager::get_instance()->remove_thd(thd);
   Connection_handler_manager::dec_connection_count(false);
+#ifdef HAVE_PSI_THREAD_INTERFACE
+  /*
+   Delete the instrumentation for the job that just completed.
+  */
+  thd->set_psi(NULL);
+  PSI_THREAD_CALL(delete_current_thread)();
+#endif /* HAVE_PSI_THREAD_INTERFACE */
+  
   delete thd;
 
   worker_context.restore();
